@@ -10,3 +10,4 @@ my-telemetry = { branch = "0.2.1", git = "https://github.com/MyJetTools/my-telem
 rust-extensions = { branch = "0.1.1", git = "https://github.com/MyJetTools/rust-extensions.git" }
 tokio = { version = "*", features = ["full"] }
 tonic = { version = "*", features = ["tls", "tls-roots", "prost"] }
+futures-util = "*"
