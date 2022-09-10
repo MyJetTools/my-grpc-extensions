@@ -10,14 +10,13 @@ pub enum ReadStreamError {
 }
 
 pub async fn as_vec<T>(
-    request: tonic::Request<tonic::Streaming<T>>,
+    mut stream_to_read: tonic::Streaming<T>,
     timeout: Duration,
 ) -> Result<Option<Vec<T>>, ReadStreamError> {
-    let mut streaming = request.into_inner();
     let mut result = LazyVec::new();
 
     loop {
-        let response = tokio::time::timeout(timeout, streaming.next()).await;
+        let response = tokio::time::timeout(timeout, stream_to_read.next()).await;
 
         if response.is_err() {
             return Err(ReadStreamError::Timeout);
@@ -38,11 +37,9 @@ pub async fn as_vec<T>(
 }
 
 pub async fn first_or_none<T>(
-    request: tonic::Request<tonic::Streaming<T>>,
+    mut streaming: tonic::Streaming<T>,
     timeout: Duration,
 ) -> Result<Option<T>, ReadStreamError> {
-    let mut streaming = request.into_inner();
-
     let response = tokio::time::timeout(timeout, streaming.next()).await;
 
     if response.is_err() {
