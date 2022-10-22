@@ -2,7 +2,7 @@ use std::{fmt::Debug, pin::Pin, time::Duration};
 
 use tokio::sync::mpsc::error::SendTimeoutError;
 
-pub async fn create_emptty_stream<TDest>() -> Result<
+pub async fn create_empty_stream<TDest>() -> Result<
     tonic::Response<
         Pin<
             Box<
