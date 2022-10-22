@@ -5,8 +5,8 @@ use tokio::sync::mpsc::error::SendTimeoutError;
 pub async fn flush_vec_to_stream<TSrc, TDest, TFn>(
     src: Vec<TSrc>,
     mapping: TFn,
-    channel_size: usize,
-    send_timeout: Duration,
+    #[cfg(feature = "adjust-server-stream")] channel_size: usize,
+    #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
     tonic::Response<
         Pin<
@@ -25,9 +25,15 @@ where
     TDest: Send + Sync + Debug + 'static,
     TFn: Fn(TSrc) -> TDest + Send + Sync + 'static,
 {
+    #[cfg(not(feature = "adjust-server-stream"))]
+    let channel_size = 100;
+
     let (tx, rx) = tokio::sync::mpsc::channel(channel_size);
 
     tokio::spawn(async move {
+        #[cfg(not(feature = "adjust-server-stream"))]
+        let send_timeout = Duration::from_secs(30);
+
         for itm in src {
             let contract = mapping(itm);
 
@@ -60,8 +66,8 @@ where
 pub async fn flush_hash_map_to_stream<TKeySrc, TValueSrc, TDest, TFn>(
     src: std::collections::HashMap<TKeySrc, TValueSrc>,
     mapping: TFn,
-    channel_size: usize,
-    send_timeout: Duration,
+    #[cfg(feature = "adjust-server-stream")] channel_size: usize,
+    #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
     tonic::Response<
         Pin<
@@ -81,9 +87,13 @@ where
     TDest: Send + Sync + Debug + 'static,
     TFn: Fn(TKeySrc, TValueSrc) -> TDest + Send + Sync + 'static,
 {
+    #[cfg(not(feature = "adjust-server-stream"))]
+    let channel_size = 100;
     let (tx, rx) = tokio::sync::mpsc::channel(channel_size);
 
     tokio::spawn(async move {
+        #[cfg(not(feature = "adjust-server-stream"))]
+        let send_timeout = Duration::from_secs(30);
         for (key, value) in src {
             let contract = mapping(key, value);
 
