@@ -2,6 +2,31 @@ use std::{fmt::Debug, pin::Pin, time::Duration};
 
 use tokio::sync::mpsc::error::SendTimeoutError;
 
+pub async fn create_emptty_stream<TDest>() -> Result<
+    tonic::Response<
+        Pin<
+            Box<
+                dyn tonic::codegen::futures_core::Stream<Item = Result<TDest, tonic::Status>>
+                    + Send
+                    + Sync
+                    + 'static,
+            >,
+        >,
+    >,
+    tonic::Status,
+>
+where
+    TDest: Send + Sync + Debug + 'static,
+{
+    let (_tx, rx) = tokio::sync::mpsc::channel(1);
+
+    let output_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let response: Pin<
+        Box<dyn futures::Stream<Item = Result<TDest, tonic::Status>> + Send + Sync + 'static>,
+    > = Box::pin(output_stream);
+    return Ok(tonic::Response::new(response));
+}
+
 pub async fn flush_vec_to_stream<TSrc, TDest, TFn>(
     src: Vec<TSrc>,
     mapping: TFn,
