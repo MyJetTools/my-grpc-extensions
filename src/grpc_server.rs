@@ -28,7 +28,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn flush_signle_item_to_stream<TDest, TFn>(
+pub async fn send_signle_item_to_stream<TDest>(
     item: TDest,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
@@ -76,7 +76,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn flush_vec_to_stream<TSrc, TDest, TFn>(
+pub async fn send_vec_to_stream<TSrc, TDest, TFn>(
     src: Vec<TSrc>,
     mapping: TFn,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
@@ -137,7 +137,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn flush_hash_map_to_stream<TKeySrc, TValueSrc, TDest, TFn>(
+pub async fn send_hash_map_to_stream<TKeySrc, TValueSrc, TDest, TFn>(
     src: std::collections::HashMap<TKeySrc, TValueSrc>,
     mapping: TFn,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
