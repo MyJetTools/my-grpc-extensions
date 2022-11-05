@@ -36,6 +36,35 @@ pub async fn as_vec<T>(
     }
 }
 
+pub async fn as_vec_with_transformation<T, TDest, TFn: Fn(T) -> TDest>(
+    mut stream_to_read: tonic::Streaming<T>,
+    timeout: Duration,
+    transform: TFn,
+) -> Result<Option<Vec<TDest>>, ReadStreamError> {
+    let mut result = LazyVec::new();
+
+    loop {
+        let response = tokio::time::timeout(timeout, stream_to_read.next()).await;
+
+        if response.is_err() {
+            return Err(ReadStreamError::Timeout);
+        }
+
+        match response.unwrap() {
+            Some(item) => match item {
+                Ok(item) => {
+                    let item = transform(item);
+                    result.add(item);
+                }
+                Err(err) => Err(ReadStreamError::TonicError(err))?,
+            },
+            None => {
+                return Ok(result.get_result());
+            }
+        }
+    }
+}
+
 pub async fn first_or_none<T>(
     mut streaming: tonic::Streaming<T>,
     timeout: Duration,
