@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use futures::Future;
 use tokio::sync::RwLock;
@@ -58,5 +58,39 @@ impl GrpcChannel {
                 panic!("Grpc {} is Timeouted", self.grpc_address);
             }
         }
+    }
+
+    pub async fn execute_stream_as_vec<
+        TResult,
+        TFuture: Future<Output = tonic::Streaming<TResult>>,
+    >(
+        &self,
+        future: TFuture,
+    ) -> Option<Vec<TResult>> {
+        let response = self.execute_with_timeout(future).await;
+
+        crate::read_grpc_stream::as_vec(response, self.timeout)
+            .await
+            .unwrap()
+    }
+
+    pub async fn excute_stream_as_hash_map<
+        TKey,
+        TResult,
+        TFuture: Future<Output = tonic::Streaming<TResult>>,
+        TGetKey: Fn(&TResult) -> TKey,
+    >(
+        &self,
+        future: TFuture,
+        get_key: TGetKey,
+    ) -> HashMap<TKey, TResult>
+    where
+        TKey: std::cmp::Eq + core::hash::Hash + Clone,
+    {
+        let response = self.execute_with_timeout(future).await;
+
+        crate::read_grpc_stream::as_hash_map(response, get_key, self.timeout)
+            .await
+            .unwrap()
     }
 }

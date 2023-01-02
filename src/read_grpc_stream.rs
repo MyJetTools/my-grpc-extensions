@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use futures_util::StreamExt;
 use rust_extensions::lazy::LazyVec;
@@ -31,6 +31,38 @@ pub async fn as_vec<T>(
             },
             None => {
                 return Ok(result.get_result());
+            }
+        }
+    }
+}
+
+pub async fn as_hash_map<TKey, T, TGetKey: Fn(&T) -> TKey>(
+    mut stream_to_read: tonic::Streaming<T>,
+    get_key: TGetKey,
+    timeout: Duration,
+) -> Result<HashMap<TKey, T>, ReadStreamError>
+where
+    TKey: std::cmp::Eq + core::hash::Hash + Clone,
+{
+    let mut result = HashMap::new();
+
+    loop {
+        let response = tokio::time::timeout(timeout, stream_to_read.next()).await;
+
+        if response.is_err() {
+            return Err(ReadStreamError::Timeout);
+        }
+
+        match response.unwrap() {
+            Some(item) => match item {
+                Ok(item) => {
+                    let key = get_key(&item);
+                    result.insert(key, item);
+                }
+                Err(err) => Err(ReadStreamError::TonicError(err))?,
+            },
+            None => {
+                return Ok(result);
             }
         }
     }
