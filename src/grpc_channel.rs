@@ -62,14 +62,14 @@ impl GrpcChannel {
 
     pub async fn execute_stream_as_vec<
         TResult,
-        TFuture: Future<Output = tonic::Streaming<TResult>>,
+        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
     >(
         &self,
         future: TFuture,
     ) -> Option<Vec<TResult>> {
-        let response = self.execute_with_timeout(future).await;
+        let response = self.execute_with_timeout(future).await.unwrap();
 
-        crate::read_grpc_stream::as_vec(response, self.timeout)
+        crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout)
             .await
             .unwrap()
     }
@@ -78,7 +78,7 @@ impl GrpcChannel {
         TSrc,
         TKey,
         TValue,
-        TFuture: Future<Output = Result<tonic::Streaming<TSrc>, tonic::Status>>,
+        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TSrc>>, tonic::Status>>,
         TGetKey: Fn(TSrc) -> (TKey, TValue),
     >(
         &self,
@@ -90,7 +90,7 @@ impl GrpcChannel {
     {
         let response = self.execute_with_timeout(future).await.unwrap();
 
-        crate::read_grpc_stream::as_hash_map(response, get_key, self.timeout)
+        crate::read_grpc_stream::as_hash_map(response.into_inner(), get_key, self.timeout)
             .await
             .unwrap()
     }
