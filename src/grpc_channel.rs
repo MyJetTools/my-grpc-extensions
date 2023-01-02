@@ -78,7 +78,7 @@ impl GrpcChannel {
         TSrc,
         TKey,
         TValue,
-        TFuture: Future<Output = tonic::Streaming<TSrc>>,
+        TFuture: Future<Output = Result<tonic::Streaming<TSrc>, tonic::Status>>,
         TGetKey: Fn(TSrc) -> (TKey, TValue),
     >(
         &self,
@@ -88,7 +88,7 @@ impl GrpcChannel {
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
-        let response = self.execute_with_timeout(future).await;
+        let response = self.execute_with_timeout(future).await.unwrap();
 
         crate::read_grpc_stream::as_hash_map(response, get_key, self.timeout)
             .await
