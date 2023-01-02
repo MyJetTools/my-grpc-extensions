@@ -36,11 +36,11 @@ pub async fn as_vec<T>(
     }
 }
 
-pub async fn as_hash_map<TKey, T, TGetKey: Fn(&T) -> TKey>(
-    mut stream_to_read: tonic::Streaming<T>,
+pub async fn as_hash_map<TSrc, TKey, TValue, TGetKey: Fn(TSrc) -> (TKey, TValue)>(
+    mut stream_to_read: tonic::Streaming<TSrc>,
     get_key: TGetKey,
     timeout: Duration,
-) -> Result<HashMap<TKey, T>, ReadStreamError>
+) -> Result<HashMap<TKey, TValue>, ReadStreamError>
 where
     TKey: std::cmp::Eq + core::hash::Hash + Clone,
 {
@@ -56,8 +56,8 @@ where
         match response.unwrap() {
             Some(item) => match item {
                 Ok(item) => {
-                    let key = get_key(&item);
-                    result.insert(key, item);
+                    let (key, value) = get_key(item);
+                    result.insert(key, value);
                 }
                 Err(err) => Err(ReadStreamError::TonicError(err))?,
             },

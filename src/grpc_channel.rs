@@ -75,15 +75,16 @@ impl GrpcChannel {
     }
 
     pub async fn excute_stream_as_hash_map<
+        TSrc,
         TKey,
-        TResult,
-        TFuture: Future<Output = tonic::Streaming<TResult>>,
-        TGetKey: Fn(&TResult) -> TKey,
+        TValue,
+        TFuture: Future<Output = tonic::Streaming<TSrc>>,
+        TGetKey: Fn(TSrc) -> (TKey, TValue),
     >(
         &self,
         future: TFuture,
         get_key: TGetKey,
-    ) -> HashMap<TKey, TResult>
+    ) -> HashMap<TKey, TValue>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
