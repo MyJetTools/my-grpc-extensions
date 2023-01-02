@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use futures_util::StreamExt;
-use rust_extensions::lazy::LazyVec;
+use rust_extensions::lazy::{LazyHashMap, LazyVec};
 
 #[derive(Debug)]
 pub enum ReadStreamError {
@@ -40,11 +40,11 @@ pub async fn as_hash_map<TSrc, TKey, TValue, TGetKey: Fn(TSrc) -> (TKey, TValue)
     mut stream_to_read: tonic::Streaming<TSrc>,
     get_key: TGetKey,
     timeout: Duration,
-) -> Result<HashMap<TKey, TValue>, ReadStreamError>
+) -> Result<Option<HashMap<TKey, TValue>>, ReadStreamError>
 where
     TKey: std::cmp::Eq + core::hash::Hash + Clone,
 {
-    let mut result = HashMap::new();
+    let mut result = LazyHashMap::new();
 
     loop {
         let response = tokio::time::timeout(timeout, stream_to_read.next()).await;
@@ -62,7 +62,7 @@ where
                 Err(err) => Err(ReadStreamError::TonicError(err))?,
             },
             None => {
-                return Ok(result);
+                return Ok(result.get_result());
             }
         }
     }

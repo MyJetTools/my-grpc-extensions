@@ -84,7 +84,7 @@ impl GrpcChannel {
         &self,
         future: TFuture,
         get_key: TGetKey,
-    ) -> HashMap<TKey, TValue>
+    ) -> Option<HashMap<TKey, TValue>>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
