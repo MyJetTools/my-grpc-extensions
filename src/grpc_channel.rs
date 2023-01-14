@@ -155,6 +155,48 @@ impl GrpcChannel {
         }
     }
 
+    pub async fn execute_stream_as_vec_with_transformation_and_retries<
+        TResult,
+        TOut,
+        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
+        TGetFuture: Fn() -> TFuture,
+        TTransform: Fn(TResult) -> TOut,
+    >(
+        &self,
+        get_future: TGetFuture,
+        max_attempts_amount: usize,
+        transform: &TTransform,
+    ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
+        let mut attempt_no = 0;
+        loop {
+            let future = get_future();
+            let response = self.execute_with_timeout(future).await;
+
+            match response {
+                Ok(response) => {
+                    let result = crate::read_grpc_stream::as_vec_with_transformation(
+                        response.into_inner(),
+                        self.timeout,
+                        transform,
+                    )
+                    .await;
+
+                    match result {
+                        Ok(result) => return Ok(result),
+                        Err(err) => {
+                            self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                                .await?;
+                        }
+                    }
+                }
+                Err(err) => {
+                    self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                        .await?;
+                }
+            }
+        }
+    }
+
     pub async fn excute_stream_as_hash_map<
         TSrc,
         TKey,
