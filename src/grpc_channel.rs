@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, rc::Rc, time::Duration};
 
 use futures::Future;
 use tokio::{sync::RwLock, time::error::Elapsed};
@@ -159,11 +159,11 @@ impl GrpcChannel {
         TResult,
         TOut,
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
-        TGetFuture: FnMut() -> TFuture,
+        TGetFuture: Fn() -> TFuture,
         TTransform: Fn(TResult) -> TOut,
     >(
         &self,
-        get_future: &mut TGetFuture,
+        get_future: Rc<TGetFuture>,
         max_attempts_amount: usize,
         transform: TTransform,
     ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
