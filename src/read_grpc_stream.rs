@@ -59,7 +59,7 @@ where
 pub async fn as_vec_with_transformation<T, TDest, TFn: Fn(T) -> TDest>(
     mut stream_to_read: tonic::Streaming<T>,
     timeout: Duration,
-    transform: TFn,
+    transform: &TFn,
 ) -> Result<Option<Vec<TDest>>, GrpcReadError> {
     let mut result = LazyVec::new();
 

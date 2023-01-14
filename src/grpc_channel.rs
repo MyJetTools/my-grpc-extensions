@@ -165,7 +165,7 @@ impl GrpcChannel {
         &self,
         get_future: TGetFuture,
         max_attempts_amount: usize,
-        transform: &TTransform,
+        transform: TTransform,
     ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
@@ -177,7 +177,7 @@ impl GrpcChannel {
                     let result = crate::read_grpc_stream::as_vec_with_transformation(
                         response.into_inner(),
                         self.timeout,
-                        transform,
+                        &transform,
                     )
                     .await;
 
