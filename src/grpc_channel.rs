@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, time::Duration};
 
 use futures::Future;
 use tokio::{sync::RwLock, time::error::Elapsed};
@@ -93,7 +93,7 @@ impl GrpcChannel {
             match self.execute_with_timeout(future).await {
                 Ok(result) => return Ok(result),
                 Err(err) => {
-                    self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                    self.handle_error(err, &mut attempt_no, max_attempts_amount)
                         .await?;
                 }
             }
@@ -110,6 +110,34 @@ impl GrpcChannel {
         let response = self.execute_with_timeout(future).await?;
 
         let result = crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout).await;
+
+        match result {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                self.remove_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn execute_stream_as_vec_with_transformation<
+        TResult,
+        TOut,
+        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
+        TTransform: Fn(TResult) -> TOut,
+    >(
+        &self,
+        future: TFuture,
+        transform: TTransform,
+    ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
+        let response = self.execute_with_timeout(future).await?;
+
+        let result = crate::read_grpc_stream::as_vec_with_transformation(
+            response.into_inner(),
+            self.timeout,
+            &transform,
+        )
+        .await;
 
         match result {
             Ok(result) => Ok(result),
@@ -142,13 +170,13 @@ impl GrpcChannel {
                     match result {
                         Ok(result) => return Ok(result),
                         Err(err) => {
-                            self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                            self.handle_error(err, &mut attempt_no, max_attempts_amount)
                                 .await?;
                         }
                     }
                 }
                 Err(err) => {
-                    self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                    self.handle_error(err, &mut attempt_no, max_attempts_amount)
                         .await?;
                 }
             }
@@ -184,13 +212,13 @@ impl GrpcChannel {
                     match result {
                         Ok(result) => return Ok(result),
                         Err(err) => {
-                            self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                            self.handle_error(err, &mut attempt_no, max_attempts_amount)
                                 .await?;
                         }
                     }
                 }
                 Err(err) => {
-                    self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                    self.handle_error(err, &mut attempt_no, max_attempts_amount)
                         .await?;
                 }
             }
@@ -259,13 +287,13 @@ impl GrpcChannel {
                     match result {
                         Ok(result) => return Ok(result),
                         Err(err) => {
-                            self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                            self.handle_error(err, &mut attempt_no, max_attempts_amount)
                                 .await?;
                         }
                     }
                 }
                 Err(err) => {
-                    self.handle_timeout_error(err, &mut attempt_no, max_attempts_amount)
+                    self.handle_error(err, &mut attempt_no, max_attempts_amount)
                         .await?;
                 }
             }
@@ -294,7 +322,7 @@ impl GrpcChannel {
         remove
     }
 
-    async fn handle_timeout_error(
+    pub async fn handle_error(
         &self,
         err: GrpcReadError,
         attempt_no: &mut usize,
