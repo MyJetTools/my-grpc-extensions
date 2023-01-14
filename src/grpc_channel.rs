@@ -163,7 +163,7 @@ impl GrpcChannel {
         TTransform: Fn(TResult) -> TOut,
     >(
         &self,
-        get_future: TGetFuture,
+        get_future: &TGetFuture,
         max_attempts_amount: usize,
         transform: TTransform,
     ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
