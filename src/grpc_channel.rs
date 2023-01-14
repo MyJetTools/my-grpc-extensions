@@ -159,7 +159,7 @@ impl GrpcChannel {
         TResult,
         TOut,
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
-        TGetFuture: Fn() -> TFuture,
+        TGetFuture: FnMut() -> TFuture,
         TTransform: Fn(TResult) -> TOut,
     >(
         &self,
