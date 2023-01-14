@@ -1,4 +1,4 @@
-use std::{collections::HashMap, rc::Rc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::Future;
 use tokio::{sync::RwLock, time::error::Elapsed};
@@ -163,7 +163,7 @@ impl GrpcChannel {
         TTransform: Fn(TResult) -> TOut,
     >(
         &self,
-        get_future: Rc<TGetFuture>,
+        get_future: Arc<TGetFuture>,
         max_attempts_amount: usize,
         transform: TTransform,
     ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
