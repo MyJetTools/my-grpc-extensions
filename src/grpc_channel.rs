@@ -19,13 +19,13 @@ pub trait GetGrpcUrl {
 pub struct GrpcChannel {
     pub channel: RwLock<Option<Channel>>,
     pub timeout: Duration,
-    get_grpc_address: Arc<dyn GetGrpcUrl>,
+    get_grpc_address: Arc<dyn GetGrpcUrl + Send + Sync + 'static>,
     service_name: &'static str,
 }
 
 impl GrpcChannel {
     pub fn new(
-        get_grpc_address: Arc<dyn GetGrpcUrl>,
+        get_grpc_address: Arc<dyn GetGrpcUrl + Send + Sync + 'static>,
         service_name: &'static str,
         timeout: Duration,
     ) -> Self {
