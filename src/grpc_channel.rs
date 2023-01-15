@@ -12,20 +12,20 @@ pub enum GrpcReadError {
 }
 
 #[async_trait::async_trait]
-pub trait GetGrpcUrl {
+pub trait GrpcClientSettings {
     async fn get_grpc_url(&self, name: &'static str) -> String;
 }
 
 pub struct GrpcChannel {
     pub channel: RwLock<Option<Channel>>,
     pub timeout: Duration,
-    get_grpc_address: Arc<dyn GetGrpcUrl + Send + Sync + 'static>,
+    get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     service_name: &'static str,
 }
 
 impl GrpcChannel {
     pub fn new(
-        get_grpc_address: Arc<dyn GetGrpcUrl + Send + Sync + 'static>,
+        get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
         service_name: &'static str,
         timeout: Duration,
     ) -> Self {
