@@ -17,3 +17,4 @@ tonic = { version = "*", features = ["tls", "tls-roots", "prost"] }
 futures-util = "*"
 tokio-stream = "*"
 futures = "*"
+async-trait = "*"

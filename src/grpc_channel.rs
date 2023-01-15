@@ -1,8 +1,8 @@
-use std::{collections::HashMap, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::Future;
 use tokio::{sync::RwLock, time::error::Elapsed};
-use tonic::transport::Channel;
+use tonic::{async_trait, transport::Channel};
 
 #[derive(Debug)]
 pub enum GrpcReadError {
@@ -11,18 +11,29 @@ pub enum GrpcReadError {
     TonicStatus(tonic::Status),
 }
 
+#[async_trait::async_trait]
+pub trait GetGrpcUrl {
+    async fn get_grpc_url(&self, name: &'static str) -> String;
+}
+
 pub struct GrpcChannel {
     pub channel: RwLock<Option<Channel>>,
     pub timeout: Duration,
-    pub grpc_address: String,
+    get_grpc_address: Arc<dyn GetGrpcUrl>,
+    service_name: &'static str,
 }
 
 impl GrpcChannel {
-    pub fn new(grpc_address: String, timeout: Duration) -> Self {
+    pub fn new(
+        get_grpc_address: Arc<dyn GetGrpcUrl>,
+        service_name: &'static str,
+        timeout: Duration,
+    ) -> Self {
         Self {
             channel: RwLock::new(None),
             timeout,
-            grpc_address,
+            get_grpc_address,
+            service_name,
         }
     }
 
@@ -40,14 +51,39 @@ impl GrpcChannel {
             return Ok(channel.clone());
         }
 
-        let end_point = Channel::from_shared(self.grpc_address.clone()).unwrap();
+        let mut attempt_no = 0;
+        loop {
+            let grpc_address = self.get_grpc_address.get_grpc_url(self.service_name).await;
+            let end_point = Channel::from_shared(grpc_address.clone());
 
-        let channel = tokio::time::timeout(self.timeout, end_point.connect()).await?;
+            if let Err(err) = end_point {
+                panic!(
+                    "Failed to create channel with url:{}. Err: {:?}",
+                    grpc_address, err
+                )
+            }
 
-        let channel = channel?;
-        *access = Some(channel.clone());
+            let end_point = end_point.unwrap();
 
-        Ok(channel)
+            match tokio::time::timeout(self.timeout, end_point.connect()).await {
+                Ok(channel) => match channel {
+                    Ok(channel) => {
+                        *access = Some(channel.clone());
+                        return Ok(channel);
+                    }
+                    Err(err) => {
+                        self.handle_error(err.into(), &mut attempt_no, 3).await?;
+                    }
+                },
+                Err(_) => {
+                    if attempt_no > 3 {
+                        return Err(GrpcReadError::Timeout);
+                    }
+                }
+            }
+
+            attempt_no += 1;
+        }
     }
 
     pub async fn execute_with_timeout<
