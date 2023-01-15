@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use futures::Future;
 use tokio::{sync::RwLock, time::error::Elapsed};
-use tonic::{async_trait, transport::Channel};
+use tonic::transport::Channel;
 
 #[derive(Debug)]
 pub enum GrpcReadError {
