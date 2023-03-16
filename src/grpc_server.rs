@@ -136,20 +136,18 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TContractToSend, TFn>(
+pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TFn>(
     src: Vec<TSrc>,
     chunk_size: usize,
-    type_mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
-    final_mapping: impl Fn(Vec<TDest>) -> TContractToSend + Send + Sync + 'static,
+    mapping: impl Fn(Vec<TSrc>) -> TDest + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
     tonic::Response<
         Pin<
             Box<
-                dyn tonic::codegen::futures_core::Stream<
-                        Item = Result<TContractToSend, tonic::Status>,
-                    > + Send
+                dyn tonic::codegen::futures_core::Stream<Item = Result<TDest, tonic::Status>>
+                    + Send
                     + Sync
                     + 'static,
             >,
@@ -160,7 +158,6 @@ pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TContractToSend, TFn>(
 where
     TSrc: Send + Sync + 'static,
     TDest: Send + Sync + Debug + 'static,
-    TContractToSend: Send + Sync + Debug + 'static,
 {
     #[cfg(not(feature = "adjust-server-stream"))]
     let channel_size = 100;
@@ -171,11 +168,10 @@ where
         #[cfg(not(feature = "adjust-server-stream"))]
         let send_timeout = DEFAULT_SEND_TIMEOUT;
 
-        let mut chunk: Vec<TDest> = Vec::with_capacity(chunk_size);
+        let mut chunk: Vec<TSrc> = Vec::with_capacity(chunk_size);
 
         for itm in src {
-            let contract = type_mapping(itm);
-            chunk.push(contract);
+            chunk.push(itm);
 
             if chunk.len() < chunk_size {
                 continue;
@@ -185,7 +181,7 @@ where
 
             std::mem::swap(&mut chunk, &mut chunk_to_send);
 
-            let contract = final_mapping(chunk_to_send);
+            let contract = mapping(chunk_to_send);
 
             let sent_result = tx
                 .send_timeout(Result::<_, tonic::Status>::Ok(contract), send_timeout)
@@ -206,7 +202,7 @@ where
         }
 
         if chunk.len() > 0 {
-            let contract = final_mapping(chunk);
+            let contract = mapping(chunk);
             let sent_result = tx
                 .send_timeout(Result::<_, tonic::Status>::Ok(contract), send_timeout)
                 .await;
@@ -226,12 +222,7 @@ where
 
     let output_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
     let response: Pin<
-        Box<
-            dyn futures::Stream<Item = Result<TContractToSend, tonic::Status>>
-                + Send
-                + Sync
-                + 'static,
-        >,
+        Box<dyn futures::Stream<Item = Result<TDest, tonic::Status>> + Send + Sync + 'static>,
     > = Box::pin(output_stream);
     return Ok(tonic::Response::new(response));
 }
