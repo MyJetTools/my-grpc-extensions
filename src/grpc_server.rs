@@ -140,7 +140,7 @@ pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TDestChunk>(
     src: Vec<TSrc>,
     chunk_size: usize,
     mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
-    final_mapping: impl Fn(Vec<TDest>) -> TDestChunk + Send + Sync + 'static,
+    transform_to_contract: impl Fn(Vec<TDest>) -> TDestChunk + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
@@ -183,7 +183,7 @@ where
 
             std::mem::swap(&mut chunk, &mut chunk_to_send);
 
-            let contract = final_mapping(chunk_to_send);
+            let contract = transform_to_contract(chunk_to_send);
 
             let sent_result = tx
                 .send_timeout(Result::<_, tonic::Status>::Ok(contract), send_timeout)
@@ -204,7 +204,7 @@ where
         }
 
         if chunk.len() > 0 {
-            let contract = final_mapping(chunk);
+            let contract = transform_to_contract(chunk);
             let sent_result = tx
                 .send_timeout(Result::<_, tonic::Status>::Ok(contract), send_timeout)
                 .await;
