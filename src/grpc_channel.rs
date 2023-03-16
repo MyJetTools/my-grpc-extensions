@@ -261,7 +261,7 @@ impl GrpcChannel {
         }
     }
 
-    pub async fn excute_stream_as_hash_map<
+    pub async fn execute_stream_as_hash_map<
         TSrc,
         TKey,
         TValue,
@@ -290,7 +290,7 @@ impl GrpcChannel {
         }
     }
 
-    pub async fn excute_stream_as_hash_map_with_retries<
+    pub async fn execute_stream_as_hash_map_with_retries<
         TSrc,
         TKey,
         TValue,

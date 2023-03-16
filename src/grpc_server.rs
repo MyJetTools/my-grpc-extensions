@@ -28,7 +28,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn send_signle_item_to_stream<TDest>(
+pub async fn send_single_item_to_stream<TDest>(
     item: TDest,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
