@@ -78,7 +78,7 @@ where
 
 pub async fn send_vec_to_stream<TSrc, TDest, TFn>(
     src: Vec<TSrc>,
-    mapping: TFn,
+    mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
@@ -97,7 +97,6 @@ pub async fn send_vec_to_stream<TSrc, TDest, TFn>(
 where
     TSrc: Send + Sync + 'static,
     TDest: Send + Sync + Debug + 'static,
-    TFn: Fn(TSrc) -> TDest + Send + Sync + 'static,
 {
     #[cfg(not(feature = "adjust-server-stream"))]
     let channel_size = 100;
@@ -137,9 +136,109 @@ where
     return Ok(tonic::Response::new(response));
 }
 
+pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TContractToSend, TFn>(
+    src: Vec<TSrc>,
+    chunk_size: usize,
+    type_mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
+    final_mapping: impl Fn(Vec<TDest>) -> TContractToSend + Send + Sync + 'static,
+    #[cfg(feature = "adjust-server-stream")] channel_size: usize,
+    #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
+) -> Result<
+    tonic::Response<
+        Pin<
+            Box<
+                dyn tonic::codegen::futures_core::Stream<
+                        Item = Result<TContractToSend, tonic::Status>,
+                    > + Send
+                    + Sync
+                    + 'static,
+            >,
+        >,
+    >,
+    tonic::Status,
+>
+where
+    TSrc: Send + Sync + 'static,
+    TDest: Send + Sync + Debug + 'static,
+    TContractToSend: Send + Sync + Debug + 'static,
+{
+    #[cfg(not(feature = "adjust-server-stream"))]
+    let channel_size = 100;
+
+    let (tx, rx) = tokio::sync::mpsc::channel(channel_size);
+
+    tokio::spawn(async move {
+        #[cfg(not(feature = "adjust-server-stream"))]
+        let send_timeout = DEFAULT_SEND_TIMEOUT;
+
+        let mut chunk: Vec<TDest> = Vec::with_capacity(chunk_size);
+
+        for itm in src {
+            let contract = type_mapping(itm);
+            chunk.push(contract);
+
+            if chunk.len() < chunk_size {
+                continue;
+            }
+
+            let mut chunk_to_send = Vec::with_capacity(chunk_size);
+
+            std::mem::swap(&mut chunk, &mut chunk_to_send);
+
+            let contract = final_mapping(chunk_to_send);
+
+            let sent_result = tx
+                .send_timeout(Result::<_, tonic::Status>::Ok(contract), send_timeout)
+                .await;
+
+            if let Err(err) = sent_result {
+                match err {
+                    SendTimeoutError::Timeout(err) => {
+                        println!("Can not send to grpc channel. Timeout. Err: {:?}", err);
+                        break;
+                    }
+                    SendTimeoutError::Closed(err) => {
+                        println!("Can not send to grpc channel. Its closed. Err: {:?}", err);
+                        break;
+                    }
+                }
+            }
+        }
+
+        if chunk.len() > 0 {
+            let contract = final_mapping(chunk);
+            let sent_result = tx
+                .send_timeout(Result::<_, tonic::Status>::Ok(contract), send_timeout)
+                .await;
+
+            if let Err(err) = sent_result {
+                match err {
+                    SendTimeoutError::Timeout(err) => {
+                        println!("Can not send to grpc channel. Timeout. Err: {:?}", err);
+                    }
+                    SendTimeoutError::Closed(err) => {
+                        println!("Can not send to grpc channel. Its closed. Err: {:?}", err);
+                    }
+                }
+            }
+        }
+    });
+
+    let output_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+    let response: Pin<
+        Box<
+            dyn futures::Stream<Item = Result<TContractToSend, tonic::Status>>
+                + Send
+                + Sync
+                + 'static,
+        >,
+    > = Box::pin(output_stream);
+    return Ok(tonic::Response::new(response));
+}
+
 pub async fn send_hash_map_to_stream<TKeySrc, TValueSrc, TDest, TFn>(
     src: std::collections::HashMap<TKeySrc, TValueSrc>,
-    mapping: TFn,
+    mapping: impl Fn(TKeySrc, TValueSrc) -> TDest + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
 ) -> Result<
@@ -159,7 +258,6 @@ where
     TKeySrc: Send + Sync + 'static,
     TValueSrc: Send + Sync + 'static,
     TDest: Send + Sync + Debug + 'static,
-    TFn: Fn(TKeySrc, TValueSrc) -> TDest + Send + Sync + 'static,
 {
     #[cfg(not(feature = "adjust-server-stream"))]
     let channel_size = 100;
