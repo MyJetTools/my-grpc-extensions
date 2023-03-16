@@ -76,7 +76,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn send_vec_to_stream<TSrc, TDest, TFn>(
+pub async fn send_vec_to_stream<TSrc, TDest>(
     src: Vec<TSrc>,
     mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
@@ -136,7 +136,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TDestChunk, TFn>(
+pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TDestChunk>(
     src: Vec<TSrc>,
     chunk_size: usize,
     mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
