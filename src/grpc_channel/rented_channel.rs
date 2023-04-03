@@ -48,8 +48,11 @@ impl<TService> RentedChannel<TService> {
         TFuture: Future<Output = Result<TResult, tonic::Status>>,
     >(
         &self,
-        future: TFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
     ) -> Result<TResult, GrpcReadError> {
+        let service = self.create_service.as_ref()(self.get_channel());
+
+        let future = get_future(service);
         let result = tokio::time::timeout(self.timeout, future).await;
 
         if result.is_err() {
@@ -72,17 +75,14 @@ impl<TService> RentedChannel<TService> {
     pub async fn execute_with_retries<
         TResult,
         TFutureResult: Future<Output = Result<TResult, tonic::Status>>,
-        TGetFuture: Fn() -> TFutureResult,
     >(
         &self,
-        get_future: TGetFuture,
+        get_future: Arc<dyn Fn(TService) -> TFutureResult>,
         max_attempts_amount: usize,
     ) -> Result<TResult, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
-            let future = get_future();
-
-            match self.execute_with_timeout(future).await {
+            match self.execute_with_timeout(get_future.clone()).await {
                 Ok(result) => return Ok(result),
                 Err(err) => {
                     self.handle_error(err, &mut attempt_no, max_attempts_amount)
@@ -138,12 +138,9 @@ impl<TService> RentedChannel<TService> {
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
     >(
         &self,
-        get_future: impl FnOnce(TService) -> TFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
     ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
-        let service = self.create_service.as_ref()(self.get_channel());
-        let future = get_future(service);
-
-        let response = self.execute_with_timeout(future).await?;
+        let response = self.execute_with_timeout(get_future).await?;
 
         let result = crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout).await;
 
@@ -163,10 +160,10 @@ impl<TService> RentedChannel<TService> {
         TTransform: Fn(TResult) -> TOut,
     >(
         &self,
-        future: TFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
         transform: TTransform,
     ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
-        let response = self.execute_with_timeout(future).await?;
+        let response = self.execute_with_timeout(get_future).await?;
 
         let result = crate::read_grpc_stream::as_vec_with_transformation(
             response.into_inner(),
@@ -187,16 +184,14 @@ impl<TService> RentedChannel<TService> {
     pub async fn execute_stream_as_vec_with_retries<
         TResult,
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
-        TGetFuture: Fn() -> TFuture,
     >(
         &self,
-        get_future: TGetFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
         max_attempts_amount: usize,
     ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
-            let future = get_future();
-            let response = self.execute_with_timeout(future).await;
+            let response = self.execute_with_timeout(get_future.clone()).await;
 
             match response {
                 Ok(response) => {
@@ -223,18 +218,16 @@ impl<TService> RentedChannel<TService> {
         TResult,
         TOut,
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
-        TGetFuture: Fn() -> TFuture,
         TTransform: Fn(TResult) -> TOut,
     >(
         &self,
-        get_future: &TGetFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
         max_attempts_amount: usize,
         transform: TTransform,
     ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
-            let future = get_future();
-            let response = self.execute_with_timeout(future).await;
+            let response = self.execute_with_timeout(get_future.clone()).await;
 
             match response {
                 Ok(response) => {
@@ -269,13 +262,13 @@ impl<TService> RentedChannel<TService> {
         TGetKey: Fn(TSrc) -> (TKey, TValue),
     >(
         &self,
-        future: TFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
         get_key: TGetKey,
     ) -> Result<Option<HashMap<TKey, TValue>>, GrpcReadError>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
-        let response = self.execute_with_timeout(future).await?;
+        let response = self.execute_with_timeout(get_future).await?;
 
         let result =
             crate::read_grpc_stream::as_hash_map(response.into_inner(), &get_key, self.timeout)
@@ -295,11 +288,10 @@ impl<TService> RentedChannel<TService> {
         TKey,
         TValue,
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TSrc>>, tonic::Status>>,
-        TGetFuture: Fn() -> TFuture,
         TGetKey: Fn(TSrc) -> (TKey, TValue),
     >(
         &self,
-        get_future: TGetFuture,
+        get_future: Arc<dyn Fn(TService) -> TFuture>,
         max_attempts_amount: usize,
         get_key: TGetKey,
     ) -> Result<Option<HashMap<TKey, TValue>>, GrpcReadError>
@@ -308,8 +300,7 @@ impl<TService> RentedChannel<TService> {
     {
         let mut attempt_no = 0;
         loop {
-            let future = get_future();
-            let response = self.execute_with_timeout(future).await;
+            let response = self.execute_with_timeout(get_future.clone()).await;
 
             match response {
                 Ok(response) => {
