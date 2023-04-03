@@ -39,7 +39,7 @@ impl GrpcChannel {
         }
     }
 
-    pub async fn get_channel<TService>(
+    pub async fn get_channel<TService: Send + Sync + 'static>(
         &self,
         create_service: Arc<dyn Fn(Channel) -> TService>,
     ) -> Result<RentedChannel<TService>, GrpcReadError> {

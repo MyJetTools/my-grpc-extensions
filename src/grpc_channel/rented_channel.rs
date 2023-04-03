@@ -10,7 +10,7 @@ use tonic::transport::Channel;
 
 use crate::{GrpcChannelPool, GrpcReadError};
 
-pub struct RentedChannel<TService> {
+pub struct RentedChannel<TService: Send + Sync + 'static> {
     channel: Option<Channel>,
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
@@ -18,7 +18,7 @@ pub struct RentedChannel<TService> {
     create_service: Arc<dyn Fn(Channel) -> TService>,
 }
 
-impl<TService> RentedChannel<TService> {
+impl<TService: Send + Sync + 'static> RentedChannel<TService> {
     pub fn new(
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
@@ -195,7 +195,7 @@ impl<TService> RentedChannel<TService> {
     }
 }
 
-impl<TService> Drop for RentedChannel<TService> {
+impl<TService: Send + Sync + 'static> Drop for RentedChannel<TService> {
     fn drop(&mut self) {
         let channel_is_alive = self
             .channel_is_alive
