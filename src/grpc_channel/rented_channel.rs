@@ -5,18 +5,17 @@ use std::{
 };
 
 use futures::Future;
-use my_telemetry::MyTelemetryContext;
 use tokio::sync::Mutex;
-use tonic::{codegen::InterceptedService, transport::Channel};
+use tonic::transport::Channel;
 
-use crate::{GrpcChannelPool, GrpcClientInterceptor, GrpcReadError};
+use crate::{GrpcChannelPool, GrpcReadError};
 
 pub struct RentedChannel<TService> {
     channel: Option<Channel>,
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
     timeout: Duration,
-    service: Option<TService>,
+    service: TService,
 }
 
 impl<TService> RentedChannel<TService> {
@@ -24,22 +23,19 @@ impl<TService> RentedChannel<TService> {
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
         timeout: Duration,
+        service: TService,
     ) -> Self {
         Self {
             channel: Some(channel),
             channel_pool,
             channel_is_alive: AtomicBool::new(true),
             timeout,
-            service: None,
+            service,
         }
     }
 
     pub fn get_channel(&self) -> Channel {
         self.channel.as_ref().unwrap().clone()
-    }
-
-    pub fn assign_service(&mut self, service: TService) {
-        self.service = Some(service);
     }
 
     pub fn mark_channel_is_dead(&self) {
@@ -340,7 +336,7 @@ impl<TService> RentedChannel<TService> {
 
 impl<TService> AsRef<TService> for RentedChannel<TService> {
     fn as_ref(&self) -> &TService {
-        self.service.as_ref().unwrap()
+        &self.service
     }
 }
 
