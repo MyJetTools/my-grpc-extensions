@@ -5,19 +5,21 @@ use std::{
 };
 
 use futures::Future;
+use my_telemetry::MyTelemetryContext;
 use tokio::sync::Mutex;
-use tonic::transport::Channel;
+use tonic::{codegen::InterceptedService, transport::Channel};
 
-use crate::{GrpcChannelPool, GrpcReadError};
+use crate::{GrpcChannelPool, GrpcClientInterceptor, GrpcReadError};
 
-pub struct RentedChannel {
+pub struct RentedChannel<TService> {
     channel: Option<Channel>,
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
     timeout: Duration,
+    service: Option<TService>,
 }
 
-impl RentedChannel {
+impl<TService> RentedChannel<TService> {
     pub fn new(
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
@@ -28,7 +30,22 @@ impl RentedChannel {
             channel_pool,
             channel_is_alive: AtomicBool::new(true),
             timeout,
+            service: None,
         }
+    }
+
+    pub fn create_intercepted_service<T, F>(
+        &self,
+        ctx: &MyTelemetryContext,
+    ) -> InterceptedService<Channel, GrpcClientInterceptor>
+    where
+        F: tonic::service::Interceptor,
+    {
+        let channel = self.channel.as_ref().unwrap().clone();
+        InterceptedService::new(channel, GrpcClientInterceptor::new(ctx.clone()))
+    }
+    pub fn assign_service(&mut self, service: TService) {
+        self.service = Some(service);
     }
 
     pub fn mark_channel_is_dead(&self) {
@@ -327,13 +344,13 @@ impl RentedChannel {
     }
 }
 
-impl AsRef<Channel> for RentedChannel {
-    fn as_ref(&self) -> &Channel {
-        self.channel.as_ref().unwrap()
+impl<TService> AsRef<TService> for RentedChannel<TService> {
+    fn as_ref(&self) -> &TService {
+        self.service.as_ref().unwrap()
     }
 }
 
-impl Drop for RentedChannel {
+impl<TService> Drop for RentedChannel<TService> {
     fn drop(&mut self) {
         let channel_is_alive = self
             .channel_is_alive

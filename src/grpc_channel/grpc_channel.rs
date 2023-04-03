@@ -39,7 +39,7 @@ impl GrpcChannel {
         }
     }
 
-    pub async fn get_channel(&self) -> Result<RentedChannel, GrpcReadError> {
+    pub async fn get_channel<TService>(&self) -> Result<RentedChannel<TService>, GrpcReadError> {
         {
             let mut access = self.channel_pool.lock().await;
             if let Some(channel) = access.rent() {
