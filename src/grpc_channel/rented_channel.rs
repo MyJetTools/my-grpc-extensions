@@ -4,7 +4,7 @@ use std::{
     time::Duration,
 };
 
-use futures::Future;
+use futures::{stream, Future};
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
@@ -55,6 +55,44 @@ impl<TService> RentedChannel<TService> {
         get_future: TGetFuture<TService, TInData, TFuture>,
     ) -> Result<TResult, GrpcReadError> {
         let mut service = self.create_service.as_ref()(self.get_channel());
+
+        let future = get_future(&mut service, in_data);
+        let result = tokio::time::timeout(self.timeout, future).await;
+
+        if result.is_err() {
+            self.mark_channel_is_dead();
+            return Err(GrpcReadError::Timeout);
+        }
+
+        let result = result.unwrap();
+
+        match result {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                let err = GrpcReadError::TonicStatus(err);
+                self.drop_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn execute_with_timeout_in_data_as_stream<
+        TInData,
+        TResult,
+        TFuture: Future<Output = Result<TResult, tonic::Status>>,
+    >(
+        &self,
+        in_data: Vec<TInData>,
+        get_future: Arc<
+            dyn Fn(
+                &mut TService,
+                futures_util::stream::Iter<std::vec::IntoIter<TInData>>,
+            ) -> TFuture,
+        >,
+    ) -> Result<TResult, GrpcReadError> {
+        let mut service = self.create_service.as_ref()(self.get_channel());
+
+        let in_data = stream::iter(in_data);
 
         let future = get_future(&mut service, in_data);
         let result = tokio::time::timeout(self.timeout, future).await;
