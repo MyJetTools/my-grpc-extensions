@@ -15,7 +15,7 @@ pub struct RentedChannel<TService> {
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
     timeout: Duration,
-    pub service: Mutex<TService>,
+    create_service: Arc<dyn Fn(Channel) -> TService>,
 }
 
 impl<TService> RentedChannel<TService> {
@@ -23,14 +23,14 @@ impl<TService> RentedChannel<TService> {
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
         timeout: Duration,
-        service: TService,
+        create_service: Arc<dyn Fn(Channel) -> TService>,
     ) -> Self {
         Self {
             channel: Some(channel),
             channel_pool,
             channel_is_alive: AtomicBool::new(true),
             timeout,
-            service: Mutex::new(service),
+            create_service,
         }
     }
 
@@ -138,10 +138,10 @@ impl<TService> RentedChannel<TService> {
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
     >(
         &self,
-        get_future: impl Fn(&mut TService) -> TFuture,
+        get_future: impl Fn(TService) -> TFuture,
     ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
-        let mut write_access = self.service.lock().await;
-        let future = get_future(&mut write_access);
+        let service = self.create_service.as_ref()(self.get_channel());
+        let future = get_future(service);
 
         let response = self.execute_with_timeout(future).await?;
 

@@ -41,17 +41,16 @@ impl GrpcChannel {
 
     pub async fn get_channel<TService>(
         &self,
-        create_service: impl Fn(Channel) -> TService,
+        create_service: Arc<dyn Fn(Channel) -> TService>,
     ) -> Result<RentedChannel<TService>, GrpcReadError> {
         {
             let mut access = self.channel_pool.lock().await;
             if let Some(channel) = access.rent() {
-                let service = create_service(channel.clone());
                 return Ok(RentedChannel::new(
                     channel,
                     self.channel_pool.clone(),
                     self.timeout,
-                    service,
+                    create_service.clone(),
                 ));
             }
         }
@@ -73,12 +72,11 @@ impl GrpcChannel {
             match tokio::time::timeout(self.timeout, end_point.connect()).await {
                 Ok(channel) => match channel {
                     Ok(channel) => {
-                        let service = create_service(channel.clone());
                         return Ok(RentedChannel::new(
                             channel,
                             self.channel_pool.clone(),
                             self.timeout,
-                            service,
+                            create_service.clone(),
                         ));
                     }
                     Err(err) => {
