@@ -138,7 +138,7 @@ impl<TService> RentedChannel<TService> {
         TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
     >(
         &self,
-        get_future: impl Fn(TService) -> TFuture,
+        get_future: impl FnOnce(TService) -> TFuture,
     ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
         let service = self.create_service.as_ref()(self.get_channel());
         let future = get_future(service);
