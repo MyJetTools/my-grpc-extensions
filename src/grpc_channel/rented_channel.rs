@@ -90,7 +90,7 @@ impl<TService> RentedChannel<TService> {
         remove
     }
 
-    pub async fn get_service(&self) -> TService {
+    pub fn get_service(&self) -> TService {
         self.create_service.as_ref()(self.get_channel())
     }
 
