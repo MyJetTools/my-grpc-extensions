@@ -34,16 +34,10 @@ impl<TService> RentedChannel<TService> {
         }
     }
 
-    pub fn create_intercepted_service<T, F>(
-        &self,
-        ctx: &MyTelemetryContext,
-    ) -> InterceptedService<Channel, GrpcClientInterceptor>
-    where
-        F: tonic::service::Interceptor,
-    {
-        let channel = self.channel.as_ref().unwrap().clone();
-        InterceptedService::new(channel, GrpcClientInterceptor::new(ctx.clone()))
+    pub fn get_channel(&self) -> Channel {
+        self.channel.as_ref().unwrap().clone()
     }
+
     pub fn assign_service(&mut self, service: TService) {
         self.service = Some(service);
     }
