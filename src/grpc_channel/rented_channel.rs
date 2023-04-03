@@ -340,6 +340,12 @@ impl<TService> AsRef<TService> for RentedChannel<TService> {
     }
 }
 
+impl<TService> AsMut<TService> for RentedChannel<TService> {
+    fn as_mut(&mut self) -> &mut TService {
+        &mut self.service
+    }
+}
+
 impl<TService> Drop for RentedChannel<TService> {
     fn drop(&mut self) {
         let channel_is_alive = self
