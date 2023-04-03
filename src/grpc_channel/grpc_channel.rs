@@ -41,7 +41,7 @@ impl GrpcChannel {
 
     pub async fn get_channel<TService: Send + Sync + 'static>(
         &self,
-        create_service: Arc<dyn Fn(Channel) -> TService>,
+        create_service: Arc<dyn Fn(Channel) -> TService + Send + Sync + 'static>,
     ) -> Result<RentedChannel<TService>, GrpcReadError> {
         {
             let mut access = self.channel_pool.lock().await;

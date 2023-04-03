@@ -15,7 +15,7 @@ pub struct RentedChannel<TService: Send + Sync + 'static> {
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
     timeout: Duration,
-    create_service: Arc<dyn Fn(Channel) -> TService>,
+    create_service: Arc<dyn Fn(Channel) -> TService + Send + Sync + 'static>,
 }
 
 impl<TService: Send + Sync + 'static> RentedChannel<TService> {
@@ -23,7 +23,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
         timeout: Duration,
-        create_service: Arc<dyn Fn(Channel) -> TService>,
+        create_service: Arc<dyn Fn(Channel) -> TService + Send + Sync + 'static>,
     ) -> Self {
         Self {
             channel: Some(channel),
