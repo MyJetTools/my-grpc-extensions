@@ -12,6 +12,9 @@ use crate::{GrpcChannelPool, GrpcReadError};
 
 type TGetFuture<TService, TInData, TFuture> = Arc<dyn Fn(&mut TService, TInData) -> TFuture>;
 
+type TGetStreamInputFuture<TService, TInData, TFuture> =
+    Arc<dyn Fn(&mut TService, futures_util::stream::Iter<std::vec::IntoIter<TInData>>) -> TFuture>;
+
 pub struct RentedChannel<TService> {
     channel: Option<Channel>,
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
@@ -83,12 +86,7 @@ impl<TService> RentedChannel<TService> {
     >(
         &self,
         in_data: Vec<TInData>,
-        get_future: Arc<
-            dyn Fn(
-                &mut TService,
-                futures_util::stream::Iter<std::vec::IntoIter<TInData>>,
-            ) -> TFuture,
-        >,
+        get_future: TGetStreamInputFuture<TService, TInData, TFuture>,
     ) -> Result<TResult, GrpcReadError> {
         let mut service = self.create_service.as_ref()(self.get_channel());
 
@@ -190,6 +188,30 @@ impl<TService> RentedChannel<TService> {
         get_future: TGetFuture<TService, TInData, TFuture>,
     ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
         let response = self.execute_with_timeout(in_data, get_future).await?;
+
+        let result = crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout).await;
+
+        match result {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                self.drop_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn execute_in_data_as_stream_result_as_stream_to_vec<
+        TInData,
+        TResult,
+        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
+    >(
+        &self,
+        in_data: Vec<TInData>,
+        get_future: TGetStreamInputFuture<TService, TInData, TFuture>,
+    ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
+        let response = self
+            .execute_with_timeout_in_data_as_stream(in_data, get_future)
+            .await?;
 
         let result = crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout).await;
 
