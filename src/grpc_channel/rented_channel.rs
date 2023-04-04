@@ -5,11 +5,12 @@ use std::{
 };
 
 use futures::Future;
+use my_telemetry::MyTelemetryContext;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
 use crate::{
-    GrpcChannelPool, GrpcReadError, RequestBuilderWithInputAsStruct,
+    GrpcChannelPool, GrpcReadError, GrpcServiceFactory, RequestBuilderWithInputAsStruct,
     RequestBuilderWithInputAsStructWithRetries,
 };
 
@@ -18,7 +19,8 @@ pub struct RentedChannel<TService: Send + Sync + 'static> {
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
     timeout: Duration,
-    service_factory: Arc<dyn Fn(Channel) -> TService>,
+    service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
+    ctx: MyTelemetryContext,
 }
 
 impl<TService: Send + Sync + 'static> RentedChannel<TService> {
@@ -26,7 +28,8 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
         timeout: Duration,
-        service_factory: Arc<dyn Fn(Channel) -> TService>,
+        service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
+        ctx: MyTelemetryContext,
     ) -> Self {
         Self {
             channel: Some(channel),
@@ -34,6 +37,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
             channel_is_alive: AtomicBool::new(true),
             timeout,
             service_factory,
+            ctx,
         }
     }
 
@@ -93,8 +97,9 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         remove
     }
 
-    pub fn get_service(&mut self) -> TService {
-        self.service_factory.as_ref()(self.get_channel())
+    pub fn get_service(&self, ctx: &MyTelemetryContext) -> TService {
+        let channel = self.get_channel();
+        self.service_factory.create_service(channel, ctx)
     }
 
     pub async fn handle_error(
@@ -221,7 +226,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         request_data: TRequest,
         grpc_executor: &TExecutor,
     ) -> Result<TResponse, GrpcReadError> {
-        let service = self.get_service();
+        let service = self.get_service(&self.ctx);
 
         let future = grpc_executor.execute(service, request_data);
 
