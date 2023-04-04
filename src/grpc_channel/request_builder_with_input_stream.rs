@@ -1,6 +1,7 @@
 use crate::{
     GrpcReadError, RentedChannel, RequestBuilderWithInputStreamWithRetries,
     RequestWithInputAsStreamGrpcExecutor, RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor,
+    StreamedResponse,
 };
 
 pub struct RequestBuilderWithInputStream<
@@ -47,7 +48,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
             .await
     }
 
-    pub async fn get_response_as_vec_from_stream<
+    pub async fn get_streamed_response<
         TResponse,
         TExecutor: RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor<TService, TRequest, TResponse>
             + Send
@@ -56,12 +57,15 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     >(
         mut self,
         grpc_executor: &TExecutor,
-    ) -> Result<Option<Vec<TResponse>>, GrpcReadError>
+    ) -> Result<StreamedResponse<TResponse>, GrpcReadError>
     where
         TResponse: Send + Sync + 'static,
     {
-        self.channel
+        let stream_to_read = self
+            .channel
             .execute_input_as_stream_response_as_stream(self.input_contract, grpc_executor)
-            .await
+            .await?;
+
+        Ok(StreamedResponse::new(stream_to_read, self.channel.timeout))
     }
 }

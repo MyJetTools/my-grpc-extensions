@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use my_telemetry::MyTelemetryContext;
+use rust_extensions::Logger;
 use tokio::{sync::Mutex, time::error::Elapsed};
 use tonic::transport::Channel;
 
@@ -37,14 +38,18 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
         get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
         service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
         timeout: Duration,
-        max_services_pool_amount: usize,
     ) -> Self {
-        Self {
-            channel_pool: Arc::new(Mutex::new(GrpcChannelPool::new(max_services_pool_amount))),
+        let channel_pool = Arc::new(Mutex::new(GrpcChannelPool::new()));
+        let result = Self {
+            channel_pool,
             timeout,
             get_grpc_address,
             service_factory,
-        }
+        };
+
+        result.ping_channel();
+
+        result
     }
 
     pub async fn get_channel(
@@ -56,7 +61,6 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
             if let Some(channel) = access.rent() {
                 return Ok(RentedChannel::new(
                     channel,
-                    self.channel_pool.clone(),
                     self.timeout,
                     self.service_factory.clone(),
                     ctx.clone(),
@@ -84,9 +88,12 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
             match tokio::time::timeout(self.timeout, end_point.connect()).await {
                 Ok(channel) => match channel {
                     Ok(channel) => {
+                        {
+                            let mut access = self.channel_pool.lock().await;
+                            access.set(self.service_factory.get_service_name(), channel.clone());
+                        }
                         return Ok(RentedChannel::new(
                             channel,
-                            self.channel_pool.clone(),
                             self.timeout,
                             self.service_factory.clone(),
                             ctx.clone(),
@@ -107,6 +114,63 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
             attempt_no += 1;
         }
+    }
+
+    fn ping_channel(&self) {
+        let get_grpc_address = self.get_grpc_address.clone();
+        let service_name = self.service_factory.get_service_name();
+        let service_factory = self.service_factory.clone();
+        let channel_pool = self.channel_pool.clone();
+        let time_out = self.timeout;
+        tokio::spawn(async move {
+            loop {
+                let channel = {
+                    let mut access = channel_pool.lock().await;
+                    access.rent()
+                };
+
+                if let Some(channel) = channel {
+                    let service =
+                        service_factory.create_service(channel, &MyTelemetryContext::new());
+
+                    let service_factory_cloned = service_factory.clone();
+
+                    let result =
+                        tokio::spawn(async move { service_factory_cloned.ping(service).await })
+                            .await;
+
+                    if result.is_err() {
+                        my_logger::LOGGER.write_warning(
+                            format!("Grpc service {}", service_name),
+                            "Failed. Disconnecting channel".to_string(),
+                            None,
+                        );
+
+                        {
+                            let mut access = channel_pool.lock().await;
+                            access.disconnect_channel();
+                        }
+
+                        let grpc_address = get_grpc_address.get_grpc_url(service_name).await;
+
+                        let end_point = Channel::from_shared(grpc_address.clone());
+
+                        if let Ok(end_point) = end_point {
+                            if let Ok(channel) =
+                                tokio::time::timeout(time_out, end_point.connect()).await
+                            {
+                                if let Ok(channel) = channel {
+                                    let mut access = channel_pool.lock().await;
+                                    access.set(service_name, channel.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+
+                tokio::time::sleep(Duration::from_secs(3)).await;
+            }
+        });
     }
 }
 

@@ -1,26 +1,29 @@
+use rust_extensions::Logger;
 use tonic::transport::Channel;
 
 pub struct GrpcChannelPool {
-    pub channels: Vec<Channel>,
-
-    max_amount_to_keep_in_pool: usize,
+    pub channel: Option<Channel>,
 }
 
 impl GrpcChannelPool {
-    pub fn new(max_amount_to_keep_in_pool: usize) -> Self {
-        Self {
-            channels: Vec::new(),
-            max_amount_to_keep_in_pool,
-        }
+    pub fn new() -> Self {
+        Self { channel: None }
     }
 
-    pub fn push_channel_back(&mut self, channel: Channel) {
-        if self.channels.len() < self.max_amount_to_keep_in_pool {
-            self.channels.push(channel);
-        }
+    pub fn set(&mut self, service_name: &'static str, channel: Channel) {
+        self.channel = Some(channel);
+
+        my_logger::LOGGER.write_info(
+            format!("Grpc service {}", service_name),
+            "Connection established".to_string(),
+            None,
+        );
     }
 
     pub fn rent(&mut self) -> Option<Channel> {
-        self.channels.pop()
+        self.channel.clone()
+    }
+    pub fn disconnect_channel(&mut self) {
+        self.channel = None;
     }
 }

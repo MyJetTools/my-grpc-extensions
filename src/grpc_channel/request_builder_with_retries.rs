@@ -1,6 +1,6 @@
 use crate::{
     GrpcReadError, RentedChannel, RequestResponseGrpcExecutor,
-    RequestWithResponseAsStreamGrpcExecutor,
+    RequestWithResponseAsStreamGrpcExecutor, StreamedResponse,
 };
 
 pub struct RequestBuilderWithRetries<
@@ -57,7 +57,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         }
     }
 
-    pub async fn get_response_as_vec_from_stream<
+    pub async fn get_streamed_response<
         TResponse,
         TExecutor: RequestWithResponseAsStreamGrpcExecutor<TService, TRequest, TResponse>
             + Send
@@ -66,7 +66,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     >(
         mut self,
         grpc_executor: &TExecutor,
-    ) -> Result<Option<Vec<TResponse>>, GrpcReadError>
+    ) -> Result<StreamedResponse<TResponse>, GrpcReadError>
     where
         TResponse: Send + Sync + 'static,
     {
@@ -78,7 +78,9 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
                 .await;
 
             match result {
-                Ok(response) => return Ok(response),
+                Ok(stream_to_read) => {
+                    return Ok(StreamedResponse::new(stream_to_read, self.channel.timeout));
+                }
                 Err(err) => {
                     self.channel
                         .handle_error(err, &mut attempt_no, self.max_attempts_amount)

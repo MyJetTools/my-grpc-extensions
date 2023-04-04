@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use crate::{
     GrpcReadError, RentedChannel, RequestWithInputAsStreamGrpcExecutor,
-    RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor,
+    RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor, StreamedResponse,
 };
 
 pub struct RequestBuilderWithInputStreamWithRetries<
@@ -57,7 +59,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         }
     }
 
-    pub async fn get_response_with_stream_as_vec<
+    pub async fn get_streamed_response<
         TResponse,
         TExecutor: RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor<TService, TRequest, TResponse>
             + Send
@@ -66,7 +68,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     >(
         mut self,
         grpc_executor: &TExecutor,
-    ) -> Result<Option<Vec<TResponse>>, GrpcReadError>
+    ) -> Result<StreamedResponse<TResponse>, GrpcReadError>
     where
         TResponse: Send + Sync + 'static,
     {
@@ -81,7 +83,57 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
                 .await;
 
             match result {
-                Ok(response) => return Ok(response),
+                Ok(stream_to_read) => {
+                    return Ok(StreamedResponse::new(stream_to_read, self.channel.timeout));
+                }
+                Err(err) => {
+                    self.channel
+                        .handle_error(err, &mut attempt_no, self.max_attempts_amount)
+                        .await?;
+                }
+            }
+
+            attempt_no += 1
+        }
+    }
+
+    pub async fn get_streamed_response_as_hash_map<
+        TKey,
+        TResponse,
+        TGetKey: Fn(TResponse) -> (TKey, TResponse),
+        TExecutor: RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor<TService, TRequest, TResponse>
+            + Send
+            + Sync
+            + 'static,
+    >(
+        mut self,
+        grpc_executor: &TExecutor,
+        get_key: TGetKey,
+    ) -> Result<Option<HashMap<TKey, TResponse>>, GrpcReadError>
+    where
+        TResponse: Send + Sync + 'static,
+        TKey: std::cmp::Eq + core::hash::Hash + Clone,
+    {
+        let mut attempt_no = 0;
+        loop {
+            let result = self
+                .channel
+                .execute_input_as_stream_response_as_stream(
+                    self.input_contract.clone(),
+                    grpc_executor,
+                )
+                .await;
+
+            match result {
+                Ok(stream_to_read) => {
+                    return Ok(crate::read_grpc_stream::as_hash_map(
+                        stream_to_read,
+                        &get_key,
+                        self.channel.timeout,
+                    )
+                    .await
+                    .unwrap());
+                }
                 Err(err) => {
                     self.channel
                         .handle_error(err, &mut attempt_no, self.max_attempts_amount)
