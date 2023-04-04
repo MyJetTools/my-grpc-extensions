@@ -19,7 +19,7 @@ impl<TService: Send + Sync + 'static, TInputContract>
 
     pub async fn execute<TResponse, TFuture: Future<Output = Result<TResponse, tonic::Status>>>(
         mut self,
-        get_future: impl Fn(&mut TService, TInputContract) -> TFuture,
+        get_future: fn(&mut TService, TInputContract) -> TFuture,
     ) -> Result<TResponse, GrpcReadError>
     where
         TResponse: Send + Sync + 'static,
