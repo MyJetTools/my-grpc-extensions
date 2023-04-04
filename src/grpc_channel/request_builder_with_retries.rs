@@ -1,6 +1,6 @@
 use crate::{GrpcReadError, RentedChannel, RequestResponseGrpcExecutor};
 
-pub struct RequestBuilderWithInputAsStructWithRetries<
+pub struct RequestBuilderWithRetries<
     TService: Send + Sync + 'static,
     TRequest: Clone + Send + Sync + 'static,
 > {
@@ -10,7 +10,7 @@ pub struct RequestBuilderWithInputAsStructWithRetries<
 }
 
 impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
-    RequestBuilderWithInputAsStructWithRetries<TService, TRequest>
+    RequestBuilderWithRetries<TService, TRequest>
 {
     pub fn new(
         input_contract: TRequest,
@@ -38,7 +38,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         loop {
             let result = self
                 .channel
-                .execute_with_timeout_2(self.input_contract.clone(), grpc_executor)
+                .execute_with_timeout(self.input_contract.clone(), grpc_executor)
                 .await;
 
             match result {

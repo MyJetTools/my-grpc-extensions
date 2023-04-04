@@ -1,17 +1,15 @@
 use std::{
-    collections::HashMap,
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
 
-use futures::Future;
 use my_telemetry::MyTelemetryContext;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
 use crate::{
-    GrpcChannelPool, GrpcReadError, GrpcServiceFactory, RequestBuilderWithInputAsStruct,
-    RequestBuilderWithInputAsStructWithRetries,
+    GrpcChannelPool, GrpcReadError, GrpcServiceFactory, RequestBuilder,
+    RequestBuilderWithInputStream, RequestBuilderWithRetries,
 };
 
 pub struct RentedChannel<TService: Send + Sync + 'static> {
@@ -48,32 +46,6 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
     pub fn mark_channel_is_dead(&self) {
         self.channel_is_alive
             .store(false, std::sync::atomic::Ordering::Relaxed);
-    }
-
-    pub async fn execute_with_timeout<
-        TResult,
-        TFuture: Future<Output = Result<TResult, tonic::Status>>,
-    >(
-        &self,
-        future: TFuture,
-    ) -> Result<TResult, GrpcReadError> {
-        let result = tokio::time::timeout(self.timeout, future).await;
-
-        if result.is_err() {
-            self.mark_channel_is_dead();
-            return Err(GrpcReadError::Timeout);
-        }
-
-        let result = result.unwrap();
-
-        match result {
-            Ok(result) => Ok(result),
-            Err(err) => {
-                let err = GrpcReadError::TonicStatus(err);
-                self.drop_channel_if_needed(&err).await;
-                Err(err)
-            }
-        }
     }
 
     pub async fn drop_channel_if_needed(&self, err: &GrpcReadError) -> bool {
@@ -122,102 +94,110 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         }
     }
 
-    pub async fn execute_stream_as_vec<
-        TResult,
-        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
-    >(
-        &self,
+    /*
+       pub async fn execute_stream_as_vec<
+           TResult,
+           TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
+       >(
+           &self,
 
-        future: TFuture,
-    ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
-        let response = self.execute_with_timeout(future).await?;
+           future: TFuture,
+       ) -> Result<Option<Vec<TResult>>, GrpcReadError> {
+           let response = self.execute_with_timeout(future).await?;
 
-        let result = crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout).await;
+           let result = crate::read_grpc_stream::as_vec(response.into_inner(), self.timeout).await;
 
-        match result {
-            Ok(result) => Ok(result),
-            Err(err) => {
-                self.drop_channel_if_needed(&err).await;
-                Err(err)
-            }
-        }
-    }
+           match result {
+               Ok(result) => Ok(result),
+               Err(err) => {
+                   self.drop_channel_if_needed(&err).await;
+                   Err(err)
+               }
+           }
+       }
 
-    pub async fn execute_stream_as_vec_with_transformation<
-        TResult,
-        TOut,
-        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
-        TTransform: Fn(TResult) -> TOut,
-    >(
-        &self,
+       pub async fn execute_stream_as_vec_with_transformation<
+           TResult,
+           TOut,
+           TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TResult>>, tonic::Status>>,
+           TTransform: Fn(TResult) -> TOut,
+       >(
+           &self,
 
-        future: TFuture,
-        transform: TTransform,
-    ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
-        let response = self.execute_with_timeout(future).await?;
+           future: TFuture,
+           transform: TTransform,
+       ) -> Result<Option<Vec<TOut>>, GrpcReadError> {
+           let response = self.execute_with_timeout(future).await?;
 
-        let result = crate::read_grpc_stream::as_vec_with_transformation(
-            response.into_inner(),
-            self.timeout,
-            &transform,
-        )
-        .await;
+           let result = crate::read_grpc_stream::as_vec_with_transformation(
+               response.into_inner(),
+               self.timeout,
+               &transform,
+           )
+           .await;
 
-        match result {
-            Ok(result) => Ok(result),
-            Err(err) => {
-                self.drop_channel_if_needed(&err).await;
-                Err(err)
-            }
-        }
-    }
+           match result {
+               Ok(result) => Ok(result),
+               Err(err) => {
+                   self.drop_channel_if_needed(&err).await;
+                   Err(err)
+               }
+           }
+       }
 
-    pub async fn execute_stream_as_hash_map<
-        TSrc,
-        TKey,
-        TValue,
-        TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TSrc>>, tonic::Status>>,
-        TGetKey: Fn(TSrc) -> (TKey, TValue),
-    >(
-        &self,
+       pub async fn execute_stream_as_hash_map<
+           TSrc,
+           TKey,
+           TValue,
+           TFuture: Future<Output = Result<tonic::Response<tonic::Streaming<TSrc>>, tonic::Status>>,
+           TGetKey: Fn(TSrc) -> (TKey, TValue),
+       >(
+           &self,
 
-        future: TFuture,
-        get_key: TGetKey,
-    ) -> Result<Option<HashMap<TKey, TValue>>, GrpcReadError>
-    where
-        TKey: std::cmp::Eq + core::hash::Hash + Clone,
-    {
-        let response = self.execute_with_timeout(future).await?;
+           future: TFuture,
+           get_key: TGetKey,
+       ) -> Result<Option<HashMap<TKey, TValue>>, GrpcReadError>
+       where
+           TKey: std::cmp::Eq + core::hash::Hash + Clone,
+       {
+           let response = self.execute_with_timeout(future).await?;
 
-        let result =
-            crate::read_grpc_stream::as_hash_map(response.into_inner(), &get_key, self.timeout)
-                .await;
+           let result =
+               crate::read_grpc_stream::as_hash_map(response.into_inner(), &get_key, self.timeout)
+                   .await;
 
-        match result {
-            Ok(result) => Ok(result),
-            Err(err) => {
-                self.drop_channel_if_needed(&err).await;
-                Err(err)
-            }
-        }
-    }
-
+           match result {
+               Ok(result) => Ok(result),
+               Err(err) => {
+                   self.drop_channel_if_needed(&err).await;
+                   Err(err)
+               }
+           }
+       }
+    */
     pub fn start_request<TInputContract: Send + Sync + 'static>(
         self,
         input_contract: TInputContract,
-    ) -> RequestBuilderWithInputAsStruct<TService, TInputContract> {
-        RequestBuilderWithInputAsStruct::new(input_contract, self)
+    ) -> RequestBuilder<TService, TInputContract> {
+        RequestBuilder::new(input_contract, self)
+    }
+
+    pub fn start_request_with_input_prams_as_stream<TInputContract: Send + Sync + 'static>(
+        self,
+        input_contract: Vec<TInputContract>,
+    ) -> RequestBuilderWithInputStream<TService, TInputContract> {
+        RequestBuilderWithInputStream::new(input_contract, self)
     }
 
     pub fn start_request_with_retries<TInputContract: Clone + Send + Sync + 'static>(
         self,
         input_contract: TInputContract,
         max_attempts_amount: usize,
-    ) -> RequestBuilderWithInputAsStructWithRetries<TService, TInputContract> {
-        RequestBuilderWithInputAsStructWithRetries::new(input_contract, self, max_attempts_amount)
+    ) -> RequestBuilderWithRetries<TService, TInputContract> {
+        RequestBuilderWithRetries::new(input_contract, self, max_attempts_amount)
     }
 
-    pub async fn execute_with_timeout_2<
+    pub async fn execute_with_timeout<
         TRequest: Send + Sync + 'static,
         TResponse: Send + Sync + 'static,
         TExecutor: RequestResponseGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
@@ -242,6 +222,41 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         match result {
             Ok(result) => Ok(result),
             Err(err) => {
+                let err = err.into();
+                self.drop_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn execute_input_as_stream_with_timeout<
+        TRequest: Send + Sync + 'static,
+        TResponse: Send + Sync + 'static,
+        TExecutor: RequestWithInputAsStreamGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
+    >(
+        &mut self,
+        request_data: Vec<TRequest>,
+        grpc_executor: &TExecutor,
+    ) -> Result<TResponse, GrpcReadError> {
+        let service = self.get_service(&self.ctx);
+
+        let input_data = futures::stream::iter(request_data);
+
+        let future = grpc_executor.execute(service, input_data);
+
+        let result = tokio::time::timeout(self.timeout, future).await;
+
+        if result.is_err() {
+            self.mark_channel_is_dead();
+            return Err(GrpcReadError::Timeout);
+        }
+
+        let result = result.unwrap();
+
+        match result {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                let err = err.into();
                 self.drop_channel_if_needed(&err).await;
                 Err(err)
             }
@@ -278,5 +293,19 @@ pub trait RequestResponseGrpcExecutor<
         &self,
         service: TService,
         input_data: TRequest,
-    ) -> Result<TResponse, GrpcReadError>;
+    ) -> Result<TResponse, tonic::Status>;
+}
+
+#[async_trait::async_trait]
+pub trait RequestWithInputAsStreamGrpcExecutor<
+    TService: Send + Sync + 'static,
+    TRequest: Send + Sync + 'static,
+    TResponse: Send + Sync + 'static,
+>
+{
+    async fn execute(
+        &self,
+        service: TService,
+        input_data: futures_util::stream::Iter<std::vec::IntoIter<TRequest>>,
+    ) -> Result<TResponse, tonic::Status>;
 }

@@ -1,17 +1,17 @@
-use crate::{GrpcReadError, RentedChannel, RequestResponseGrpcExecutor};
+use crate::{GrpcReadError, RentedChannel, RequestWithInputAsStreamGrpcExecutor};
 
-pub struct RequestBuilderWithInputAsStruct<
+pub struct RequestBuilderWithInputStream<
     TService: Send + Sync + 'static,
     TRequest: Send + Sync + 'static,
 > {
-    input_contract: TRequest,
+    input_contract: Vec<TRequest>,
     channel: RentedChannel<TService>,
 }
 
 impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
-    RequestBuilderWithInputAsStruct<TService, TRequest>
+    RequestBuilderWithInputStream<TService, TRequest>
 {
-    pub fn new(input_contract: TRequest, channel: RentedChannel<TService>) -> Self {
+    pub fn new(input_contract: Vec<TRequest>, channel: RentedChannel<TService>) -> Self {
         Self {
             input_contract,
             channel,
@@ -20,7 +20,7 @@ impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
 
     pub async fn execute<
         TResponse,
-        TExecutor: RequestResponseGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
+        TExecutor: RequestWithInputAsStreamGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
     >(
         mut self,
         grpc_executor: &TExecutor,
@@ -29,7 +29,7 @@ impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
         TResponse: Send + Sync + 'static,
     {
         self.channel
-            .execute_with_timeout_2(self.input_contract, grpc_executor)
+            .execute_input_as_stream_with_timeout(self.input_contract, grpc_executor)
             .await
     }
 }
