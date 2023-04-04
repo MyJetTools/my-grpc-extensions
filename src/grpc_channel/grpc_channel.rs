@@ -8,6 +8,7 @@ use crate::{GrpcChannelPool, RentedChannel};
 #[derive(Debug)]
 pub enum GrpcReadError {
     Timeout,
+
     TransportError(tonic::transport::Error),
     TonicStatus(tonic::Status),
 }
@@ -39,19 +40,18 @@ impl GrpcChannel {
         }
     }
 
-    pub async fn get_channel<TService: Send + Sync + 'static, TFactory: Fn(Channel) -> TService>(
+    pub async fn get_channel<TService: Send + Sync + 'static>(
         &self,
-        create_service: TFactory,
+        service_factory: Arc<dyn Fn(Channel) -> TService>,
     ) -> Result<RentedChannel<TService>, GrpcReadError> {
         {
             let mut access = self.channel_pool.lock().await;
             if let Some(channel) = access.rent() {
-                let cloned_channel = channel.clone();
                 return Ok(RentedChannel::new(
                     channel,
                     self.channel_pool.clone(),
                     self.timeout,
-                    create_service(cloned_channel),
+                    service_factory.clone(),
                 ));
             }
         }
@@ -73,12 +73,11 @@ impl GrpcChannel {
             match tokio::time::timeout(self.timeout, end_point.connect()).await {
                 Ok(channel) => match channel {
                     Ok(channel) => {
-                        let cloned_channel = channel.clone();
                         return Ok(RentedChannel::new(
                             channel,
                             self.channel_pool.clone(),
                             self.timeout,
-                            create_service(cloned_channel),
+                            service_factory.clone(),
                         ));
                     }
                     Err(err) => {

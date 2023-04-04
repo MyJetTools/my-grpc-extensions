@@ -1,5 +1,3 @@
-use futures::Future;
-
 use crate::{GrpcReadError, RentedChannel, RequestResponseGrpcExecutor};
 
 pub struct RequestBuilderWithInputAsStruct<
@@ -30,9 +28,8 @@ impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
     where
         TResponse: Send + Sync + 'static,
     {
-        let service = self.channel.get_service();
         self.channel
-            .execute_with_timeout_2(service, self.input_contract, grpc_executor)
+            .execute_with_timeout_2(self.input_contract, grpc_executor)
             .await
     }
 }

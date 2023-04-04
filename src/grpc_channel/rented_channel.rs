@@ -8,14 +8,17 @@ use futures::Future;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
-use crate::{GrpcChannelPool, GrpcReadError, RequestBuilderWithInputAsStruct};
+use crate::{
+    GrpcChannelPool, GrpcReadError, RequestBuilderWithInputAsStruct,
+    RequestBuilderWithInputAsStructWithRetries,
+};
 
 pub struct RentedChannel<TService: Send + Sync + 'static> {
     channel: Option<Channel>,
     channel_pool: Arc<Mutex<GrpcChannelPool>>,
     channel_is_alive: AtomicBool,
     timeout: Duration,
-    service: Option<TService>,
+    service_factory: Arc<dyn Fn(Channel) -> TService>,
 }
 
 impl<TService: Send + Sync + 'static> RentedChannel<TService> {
@@ -23,14 +26,14 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         channel: Channel,
         channel_pool: Arc<Mutex<GrpcChannelPool>>,
         timeout: Duration,
-        service: TService,
+        service_factory: Arc<dyn Fn(Channel) -> TService>,
     ) -> Self {
         Self {
             channel: Some(channel),
             channel_pool,
             channel_is_alive: AtomicBool::new(true),
             timeout,
-            service: Some(service),
+            service_factory,
         }
     }
 
@@ -91,7 +94,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
     }
 
     pub fn get_service(&mut self) -> TService {
-        self.service.take().unwrap()
+        self.service_factory.as_ref()(self.get_channel())
     }
 
     pub async fn handle_error(
@@ -194,11 +197,19 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         }
     }
 
-    pub fn start_request_with_params<TInputContract: Send + Sync + 'static>(
+    pub fn start_request<TInputContract: Send + Sync + 'static>(
         self,
         input_contract: TInputContract,
     ) -> RequestBuilderWithInputAsStruct<TService, TInputContract> {
         RequestBuilderWithInputAsStruct::new(input_contract, self)
+    }
+
+    pub fn start_request_with_retries<TInputContract: Clone + Send + Sync + 'static>(
+        self,
+        input_contract: TInputContract,
+        max_attempts_amount: usize,
+    ) -> RequestBuilderWithInputAsStructWithRetries<TService, TInputContract> {
+        RequestBuilderWithInputAsStructWithRetries::new(input_contract, self, max_attempts_amount)
     }
 
     pub async fn execute_with_timeout_2<
@@ -206,11 +217,12 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         TResponse: Send + Sync + 'static,
         TExecutor: RequestResponseGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
     >(
-        &self,
-        service: TService,
+        &mut self,
         request_data: TRequest,
         grpc_executor: &TExecutor,
     ) -> Result<TResponse, GrpcReadError> {
+        let service = self.get_service();
+
         let future = grpc_executor.execute(service, request_data);
 
         let result = tokio::time::timeout(self.timeout, future).await;
