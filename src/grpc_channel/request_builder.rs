@@ -1,11 +1,12 @@
-use crate::{GrpcReadError, RentedChannel, RequestResponseGrpcExecutor};
+use crate::{GrpcReadError, RentedChannel, RequestBuilderWithRetries, RequestResponseGrpcExecutor};
 
-pub struct RequestBuilder<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static> {
+pub struct RequestBuilder<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
+{
     input_contract: TRequest,
     channel: RentedChannel<TService>,
 }
 
-impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
+impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     RequestBuilder<TService, TRequest>
 {
     pub fn new(input_contract: TRequest, channel: RentedChannel<TService>) -> Self {
@@ -13,6 +14,13 @@ impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
             input_contract,
             channel,
         }
+    }
+
+    pub fn with_retries(
+        self,
+        attempts_amount: usize,
+    ) -> RequestBuilderWithRetries<TService, TRequest> {
+        RequestBuilderWithRetries::new(self.input_contract, self.channel, attempts_amount)
     }
 
     pub async fn execute<
@@ -26,7 +34,7 @@ impl<TService: Send + Sync + 'static, TRequest: Send + Sync + 'static>
         TResponse: Send + Sync + 'static,
     {
         self.channel
-            .execute_with_timeout(self.input_contract, grpc_executor)
+            .execute(self.input_contract, grpc_executor)
             .await
     }
 }

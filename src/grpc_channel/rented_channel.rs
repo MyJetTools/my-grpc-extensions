@@ -9,7 +9,7 @@ use tonic::transport::Channel;
 
 use crate::{
     GrpcChannelPool, GrpcReadError, GrpcServiceFactory, RequestBuilder,
-    RequestBuilderWithInputStream, RequestBuilderWithRetries,
+    RequestBuilderWithInputStream,
 };
 
 pub struct RentedChannel<TService: Send + Sync + 'static> {
@@ -175,7 +175,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
            }
        }
     */
-    pub fn start_request<TInputContract: Send + Sync + 'static>(
+    pub fn start_request<TInputContract: Clone + Send + Sync + 'static>(
         self,
         input_contract: TInputContract,
     ) -> RequestBuilder<TService, TInputContract> {
@@ -189,15 +189,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         RequestBuilderWithInputStream::new(input_contract, self)
     }
 
-    pub fn start_request_with_retries<TInputContract: Clone + Send + Sync + 'static>(
-        self,
-        input_contract: TInputContract,
-        max_attempts_amount: usize,
-    ) -> RequestBuilderWithRetries<TService, TInputContract> {
-        RequestBuilderWithRetries::new(input_contract, self, max_attempts_amount)
-    }
-
-    pub async fn execute_with_timeout<
+    pub async fn execute<
         TRequest: Send + Sync + 'static,
         TResponse: Send + Sync + 'static,
         TExecutor: RequestResponseGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
@@ -229,7 +221,44 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         }
     }
 
-    pub async fn execute_input_as_stream_with_timeout<
+    pub async fn execute_with_response_as_stream<
+        TRequest: Send + Sync + 'static,
+        TResponse: Send + Sync + 'static,
+        TExecutor: RequestWithResponseAsStreamGrpcExecutor<TService, TRequest, TResponse>
+            + Send
+            + Sync
+            + 'static,
+    >(
+        &mut self,
+        request_data: TRequest,
+        grpc_executor: &TExecutor,
+    ) -> Result<Option<Vec<TResponse>>, GrpcReadError> {
+        let service = self.get_service(&self.ctx);
+
+        let future = grpc_executor.execute(service, request_data);
+
+        let result = tokio::time::timeout(self.timeout, future).await;
+
+        if result.is_err() {
+            self.mark_channel_is_dead();
+            return Err(GrpcReadError::Timeout);
+        }
+
+        let result = result.unwrap();
+
+        match result {
+            Ok(response) => {
+                return crate::read_grpc_stream::as_vec(response, self.timeout).await;
+            }
+            Err(err) => {
+                let err = err.into();
+                self.drop_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn execute_input_as_stream<
         TRequest: Send + Sync + 'static,
         TResponse: Send + Sync + 'static,
         TExecutor: RequestWithInputAsStreamGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
@@ -240,9 +269,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
     ) -> Result<TResponse, GrpcReadError> {
         let service = self.get_service(&self.ctx);
 
-        let input_data = futures::stream::iter(request_data);
-
-        let future = grpc_executor.execute(service, input_data);
+        let future = grpc_executor.execute(service, request_data);
 
         let result = tokio::time::timeout(self.timeout, future).await;
 
@@ -255,6 +282,43 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
 
         match result {
             Ok(result) => Ok(result),
+            Err(err) => {
+                let err = err.into();
+                self.drop_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
+    }
+
+    pub async fn execute_input_as_stream_response_as_stream<
+        TRequest: Send + Sync + 'static,
+        TResponse: Send + Sync + 'static,
+        TExecutor: RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor<TService, TRequest, TResponse>
+            + Send
+            + Sync
+            + 'static,
+    >(
+        &mut self,
+        request_data: Vec<TRequest>,
+        grpc_executor: &TExecutor,
+    ) -> Result<Option<Vec<TResponse>>, GrpcReadError> {
+        let service = self.get_service(&self.ctx);
+
+        let future = grpc_executor.execute(service, request_data);
+
+        let result = tokio::time::timeout(self.timeout, future).await;
+
+        if result.is_err() {
+            self.mark_channel_is_dead();
+            return Err(GrpcReadError::Timeout);
+        }
+
+        let result = result.unwrap();
+
+        match result {
+            Ok(response) => {
+                return crate::read_grpc_stream::as_vec(response, self.timeout).await;
+            }
             Err(err) => {
                 let err = err.into();
                 self.drop_channel_if_needed(&err).await;
@@ -297,6 +361,20 @@ pub trait RequestResponseGrpcExecutor<
 }
 
 #[async_trait::async_trait]
+pub trait RequestWithResponseAsStreamGrpcExecutor<
+    TService: Send + Sync + 'static,
+    TRequest: Send + Sync + 'static,
+    TResponse: Send + Sync + 'static,
+>
+{
+    async fn execute(
+        &self,
+        service: TService,
+        input_data: TRequest,
+    ) -> Result<tonic::Streaming<TResponse>, tonic::Status>;
+}
+
+#[async_trait::async_trait]
 pub trait RequestWithInputAsStreamGrpcExecutor<
     TService: Send + Sync + 'static,
     TRequest: Send + Sync + 'static,
@@ -306,6 +384,20 @@ pub trait RequestWithInputAsStreamGrpcExecutor<
     async fn execute(
         &self,
         service: TService,
-        input_data: futures_util::stream::Iter<std::vec::IntoIter<TRequest>>,
+        input_data: Vec<TRequest>,
     ) -> Result<TResponse, tonic::Status>;
+}
+
+#[async_trait::async_trait]
+pub trait RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor<
+    TService: Send + Sync + 'static,
+    TRequest: Send + Sync + 'static,
+    TResponse: Send + Sync + 'static,
+>
+{
+    async fn execute(
+        &self,
+        service: TService,
+        input_data: Vec<TRequest>,
+    ) -> Result<tonic::Streaming<TResponse>, tonic::Status>;
 }
