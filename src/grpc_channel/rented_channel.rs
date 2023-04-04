@@ -194,11 +194,43 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         }
     }
 
-    pub fn start_request_with_params<TInputContract>(
+    pub fn start_request_with_params<TInputContract: Send + Sync + 'static>(
         self,
         input_contract: TInputContract,
     ) -> RequestBuilderWithInputAsStruct<TService, TInputContract> {
         RequestBuilderWithInputAsStruct::new(input_contract, self)
+    }
+
+    pub async fn execute_with_timeout_2<
+        TRequest: Send + Sync + 'static,
+        TResponse: Send + Sync + 'static,
+    >(
+        &self,
+        service: TService,
+        request_data: TRequest,
+        grpc_executor: impl RequestResponseGrpcExecutor<TService, TRequest, TResponse>
+            + Send
+            + Sync
+            + 'static,
+    ) -> Result<TResponse, GrpcReadError> {
+        let future = grpc_executor.execute(service, request_data);
+
+        let result = tokio::time::timeout(self.timeout, future).await;
+
+        if result.is_err() {
+            self.mark_channel_is_dead();
+            return Err(GrpcReadError::Timeout);
+        }
+
+        let result = result.unwrap();
+
+        match result {
+            Ok(result) => Ok(result),
+            Err(err) => {
+                self.drop_channel_if_needed(&err).await;
+                Err(err)
+            }
+        }
     }
 }
 
@@ -218,4 +250,18 @@ impl<TService: Send + Sync + 'static> Drop for RentedChannel<TService> {
             }
         }
     }
+}
+
+#[async_trait::async_trait]
+pub trait RequestResponseGrpcExecutor<
+    TService: Send + Sync + 'static,
+    TRequest: Send + Sync + 'static,
+    TResponse: Send + Sync + 'static,
+>
+{
+    async fn execute(
+        &self,
+        service: TService,
+        input_data: TRequest,
+    ) -> Result<TResponse, GrpcReadError>;
 }
