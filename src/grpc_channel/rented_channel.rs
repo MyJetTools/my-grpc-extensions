@@ -8,7 +8,7 @@ use futures::Future;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
-use crate::{GrpcChannelPool, GrpcReadError};
+use crate::{GrpcChannelPool, GrpcReadError, RequestBuilderWithInputAsStruct};
 
 pub struct RentedChannel<TService: Send + Sync + 'static> {
     channel: Option<Channel>,
@@ -69,7 +69,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         }
     }
 
-    async fn drop_channel_if_needed(&self, err: &GrpcReadError) -> bool {
+    pub async fn drop_channel_if_needed(&self, err: &GrpcReadError) -> bool {
         let remove = match err {
             GrpcReadError::TonicStatus(status) => {
                 let code = status.code();
@@ -192,6 +192,13 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
                 Err(err)
             }
         }
+    }
+
+    pub fn start_request_with_params<TInputContract>(
+        self,
+        input_contract: TInputContract,
+    ) -> RequestBuilderWithInputAsStruct<TService, TInputContract> {
+        RequestBuilderWithInputAsStruct::new(input_contract, self)
     }
 }
 
