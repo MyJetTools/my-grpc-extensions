@@ -204,14 +204,12 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
     pub async fn execute_with_timeout_2<
         TRequest: Send + Sync + 'static,
         TResponse: Send + Sync + 'static,
+        TExecutor: RequestResponseGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
     >(
         &self,
         service: TService,
         request_data: TRequest,
-        grpc_executor: impl RequestResponseGrpcExecutor<TService, TRequest, TResponse>
-            + Send
-            + Sync
-            + 'static,
+        grpc_executor: &TExecutor,
     ) -> Result<TResponse, GrpcReadError> {
         let future = grpc_executor.execute(service, request_data);
 
