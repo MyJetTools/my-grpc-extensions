@@ -129,6 +129,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     access.rent()
                 };
 
+                let mut create_channel = false;
+
                 if let Some(channel) = channel {
                     let service =
                         service_factory.create_service(channel, &MyTelemetryContext::new());
@@ -151,37 +153,43 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             access.disconnect_channel();
                         }
 
-                        let grpc_address = get_grpc_address.get_grpc_url(service_name).await;
+                        create_channel = true;
+                    }
+                } else {
+                    create_channel = true;
+                }
 
-                        let end_point = Channel::from_shared(grpc_address.clone());
+                if create_channel {
+                    let grpc_address = get_grpc_address.get_grpc_url(service_name).await;
 
-                        if let Ok(end_point) = end_point {
-                            if let Ok(channel) =
-                                tokio::time::timeout(time_out, end_point.connect()).await
-                            {
-                                match channel {
-                                    Ok(channel) => {
-                                        let mut access = channel_pool.lock().await;
-                                        access.set(service_name, channel.clone());
-                                    }
-                                    Err(err) => {
-                                        my_logger::LOGGER.write_error(
-                                            format!("Grpc service {}", service_name),
-                                            format!(
-                                                "Can not connect to the channel {:?}. Err: {:?}",
-                                                end_point, err
-                                            ),
-                                            None,
-                                        );
-                                    }
+                    let end_point = Channel::from_shared(grpc_address.clone());
+
+                    if let Ok(end_point) = end_point {
+                        if let Ok(channel) =
+                            tokio::time::timeout(time_out, end_point.connect()).await
+                        {
+                            match channel {
+                                Ok(channel) => {
+                                    let mut access = channel_pool.lock().await;
+                                    access.set(service_name, channel.clone());
                                 }
-                            } else {
-                                my_logger::LOGGER.write_error(
-                                    format!("Grpc service {}", service_name),
-                                    format!("Invalid endpoint {:?}. ", end_point),
-                                    None,
-                                );
+                                Err(err) => {
+                                    my_logger::LOGGER.write_error(
+                                        format!("Grpc service {}", service_name),
+                                        format!(
+                                            "Can not connect to the channel {:?}. Err: {:?}",
+                                            end_point, err
+                                        ),
+                                        None,
+                                    );
+                                }
                             }
+                        } else {
+                            my_logger::LOGGER.write_error(
+                                format!("Grpc service {}", service_name),
+                                format!("Invalid endpoint {:?}. ", end_point),
+                                None,
+                            );
                         }
                     }
                 }
