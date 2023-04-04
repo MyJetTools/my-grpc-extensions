@@ -9,7 +9,6 @@ use crate::{GrpcChannelPool, RentedChannel};
 #[derive(Debug)]
 pub enum GrpcReadError {
     Timeout,
-
     TransportError(tonic::transport::Error),
     TonicStatus(tonic::Status),
 }
@@ -19,9 +18,11 @@ pub trait GrpcClientSettings {
     async fn get_grpc_url(&self, name: &'static str) -> String;
 }
 
+#[async_trait::async_trait]
 pub trait GrpcServiceFactory<TService: Send + Sync + 'static> {
     fn create_service(&self, channel: Channel, ctx: &MyTelemetryContext) -> TService;
     fn get_service_name(&self) -> &'static str;
+    async fn ping(&self, service: TService);
 }
 
 pub struct GrpcChannel<TService: Send + Sync + 'static> {
