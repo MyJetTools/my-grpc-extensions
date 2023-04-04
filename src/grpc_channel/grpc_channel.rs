@@ -159,10 +159,28 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             if let Ok(channel) =
                                 tokio::time::timeout(time_out, end_point.connect()).await
                             {
-                                if let Ok(channel) = channel {
-                                    let mut access = channel_pool.lock().await;
-                                    access.set(service_name, channel.clone());
+                                match channel {
+                                    Ok(channel) => {
+                                        let mut access = channel_pool.lock().await;
+                                        access.set(service_name, channel.clone());
+                                    }
+                                    Err(err) => {
+                                        my_logger::LOGGER.write_error(
+                                            format!("Grpc service {}", service_name),
+                                            format!(
+                                                "Can not connect to the channel {:?}. Err: {:?}",
+                                                end_point, err
+                                            ),
+                                            None,
+                                        );
+                                    }
                                 }
+                            } else {
+                                my_logger::LOGGER.write_error(
+                                    format!("Grpc service {}", service_name),
+                                    format!("Invalid endpoint {:?}. ", end_point),
+                                    None,
+                                );
                             }
                         }
                     }
