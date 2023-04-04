@@ -1,4 +1,4 @@
-use rust_extensions::Logger;
+use my_logger::LogEventCtx;
 use tonic::transport::Channel;
 
 pub struct GrpcChannelPool {
@@ -16,7 +16,7 @@ impl GrpcChannelPool {
         my_logger::LOGGER.write_info(
             format!("Grpc service {}", service_name),
             "Connection established".to_string(),
-            None,
+            LogEventCtx::new(),
         );
     }
 

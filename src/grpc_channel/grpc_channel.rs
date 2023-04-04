@@ -1,7 +1,8 @@
 use std::{sync::Arc, time::Duration};
 
+use my_logger::LogEventCtx;
 use my_telemetry::MyTelemetryContext;
-use rust_extensions::Logger;
+
 use tokio::{sync::Mutex, time::error::Elapsed};
 use tonic::transport::Channel;
 
@@ -145,7 +146,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                         my_logger::LOGGER.write_warning(
                             format!("Grpc service {}", service_name),
                             "Failed. Disconnecting channel".to_string(),
-                            None,
+                            LogEventCtx::new(),
                         );
 
                         {
@@ -180,7 +181,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                                             "Can not connect to the channel {:?}. Err: {:?}",
                                             end_point, err
                                         ),
-                                        None,
+                                        LogEventCtx::new(),
                                     );
                                 }
                             }
@@ -188,7 +189,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             my_logger::LOGGER.write_error(
                                 format!("Grpc service {}", service_name),
                                 format!("Invalid endpoint {:?}. ", end_point),
-                                None,
+                                LogEventCtx::new(),
                             );
                         }
                     }
