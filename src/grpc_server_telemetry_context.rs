@@ -4,7 +4,7 @@ use my_telemetry::MyTelemetryContext;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 
 pub struct GrpcServerTelemetryContext {
-    pub ctx: Option<MyTelemetryContext>,
+    ctx: Option<MyTelemetryContext>,
     pub started: DateTimeAsMicroseconds,
     addr: Option<SocketAddr>,
     method: Option<String>,
