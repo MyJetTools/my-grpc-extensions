@@ -29,7 +29,10 @@ pub trait GrpcServiceFactory<TService: Send + Sync + 'static> {
 
 pub struct GrpcChannel<TService: Send + Sync + 'static> {
     pub channel_pool: Arc<Mutex<GrpcChannelPool>>,
-    pub timeout: Duration,
+    pub request_timeout: Duration,
+    pub ping_timeout: Duration,
+    pub ping_interval: Duration,
+
     get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
 }
@@ -38,12 +41,16 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
     pub fn new(
         get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
         service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
-        timeout: Duration,
+        request_timeout: Duration,
+        ping_timeout: Duration,
+        ping_interval: Duration,
     ) -> Self {
         let channel_pool = Arc::new(Mutex::new(GrpcChannelPool::new()));
         let result = Self {
             channel_pool,
-            timeout,
+            request_timeout,
+            ping_timeout,
+            ping_interval,
             get_grpc_address,
             service_factory,
         };
@@ -62,7 +69,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
             if let Some(channel) = access.rent() {
                 return Ok(RentedChannel::new(
                     channel,
-                    self.timeout,
+                    self.request_timeout,
                     self.service_factory.clone(),
                     ctx.clone(),
                 ));
@@ -86,7 +93,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
             let end_point = end_point.unwrap();
 
-            match tokio::time::timeout(self.timeout, end_point.connect()).await {
+            match tokio::time::timeout(self.request_timeout, end_point.connect()).await {
                 Ok(channel) => match channel {
                     Ok(channel) => {
                         {
@@ -95,7 +102,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                         }
                         return Ok(RentedChannel::new(
                             channel,
-                            self.timeout,
+                            self.request_timeout,
                             self.service_factory.clone(),
                             ctx.clone(),
                         ));
@@ -121,8 +128,10 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
         let get_grpc_address = self.get_grpc_address.clone();
         let service_name = self.service_factory.get_service_name();
         let service_factory = self.service_factory.clone();
-        let channel_pool = self.channel_pool.clone();
-        let time_out = self.timeout;
+        let channel_pool: Arc<Mutex<GrpcChannelPool>> = self.channel_pool.clone();
+        let request_timeout = self.request_timeout;
+        let ping_interval = self.ping_interval;
+        let ping_timeout = self.ping_timeout;
         tokio::spawn(async move {
             loop {
                 let channel = {
@@ -138,9 +147,12 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
                     let service_factory_cloned = service_factory.clone();
 
-                    let result =
-                        tokio::spawn(async move { service_factory_cloned.ping(service).await })
-                            .await;
+                    let result = tokio::spawn(async move {
+                        let future = service_factory_cloned.ping(service);
+
+                        tokio::time::timeout(ping_timeout, future).await.unwrap();
+                    })
+                    .await;
 
                     if result.is_err() {
                         my_logger::LOGGER.write_warning(
@@ -167,7 +179,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
                     if let Ok(end_point) = end_point {
                         if let Ok(channel) =
-                            tokio::time::timeout(time_out, end_point.connect()).await
+                            tokio::time::timeout(request_timeout, end_point.connect()).await
                         {
                             match channel {
                                 Ok(channel) => {
@@ -195,7 +207,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     }
                 }
 
-                tokio::time::sleep(Duration::from_secs(3)).await;
+                tokio::time::sleep(ping_interval).await;
             }
         });
     }
