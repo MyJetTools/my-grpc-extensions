@@ -156,7 +156,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
                     if result.is_err() {
                         my_logger::LOGGER.write_warning(
-                            format!("Grpc service {}", service_name),
+                            format!("GrpcService {}", service_name),
                             "Failed. Disconnecting channel".to_string(),
                             LogEventCtx::new(),
                         );
@@ -188,7 +188,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                                 }
                                 Err(err) => {
                                     my_logger::LOGGER.write_error(
-                                        format!("Grpc service {}", service_name),
+                                        format!("GrpcService {}", service_name),
                                         format!(
                                             "Can not connect to the channel {:?}. Err: {:?}",
                                             end_point, err
@@ -199,7 +199,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             }
                         } else {
                             my_logger::LOGGER.write_error(
-                                format!("Grpc service {}", service_name),
+                                format!("GrpcService {}", service_name),
                                 format!("Invalid endpoint {:?}. ", end_point),
                                 LogEventCtx::new(),
                             );
