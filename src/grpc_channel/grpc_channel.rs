@@ -150,15 +150,17 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     let result = tokio::spawn(async move {
                         let future = service_factory_cloned.ping(service);
 
-                        tokio::time::timeout(ping_timeout, future).await.unwrap();
+                        if tokio::time::timeout(ping_timeout, future).await.is_err() {
+                            panic!("GrpcChanel {} Ping Timeout", service_name)
+                        }
                     })
                     .await;
 
                     if result.is_err() {
                         my_logger::LOGGER.write_warning(
-                            format!("GrpcService {}", service_name),
-                            "Failed. Disconnecting channel".to_string(),
-                            LogEventCtx::new(),
+                            "GrpcChannel::ping_channel",
+                            "Ping fail. Disconnecting channel".to_string(),
+                            LogEventCtx::new().add("GrpcClient", service_name),
                         );
 
                         {
@@ -188,20 +190,20 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                                 }
                                 Err(err) => {
                                     my_logger::LOGGER.write_error(
-                                        format!("GrpcService {}", service_name),
+                                        "GrpcChannel::ping_channel",
                                         format!(
                                             "Can not connect to the channel {:?}. Err: {:?}",
                                             end_point, err
                                         ),
-                                        LogEventCtx::new(),
+                                        LogEventCtx::new().add("GrpcClient", service_name),
                                     );
                                 }
                             }
                         } else {
                             my_logger::LOGGER.write_error(
-                                format!("GrpcService {}", service_name),
-                                format!("Invalid endpoint {:?}. ", end_point),
-                                LogEventCtx::new(),
+                                "GrpcChannel::ping_channel",
+                                format!("Invalid GrpcClient endpoint {:?}. ", end_point),
+                                LogEventCtx::new().add("GrpcClient", service_name),
                             );
                         }
                     }

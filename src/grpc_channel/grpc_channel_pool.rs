@@ -14,9 +14,9 @@ impl GrpcChannelPool {
         self.channel = Some(channel);
 
         my_logger::LOGGER.write_info(
-            format!("GrpcService {}", service_name),
-            format!("GRPC Connection established for service: {}", service_name),
-            LogEventCtx::new(),
+            "GrpcChannelPool::set",
+            "GRPC Connection is established for service",
+            LogEventCtx::new().add("GrpcClient", service_name),
         );
     }
 
