@@ -151,18 +151,29 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                         let future = service_factory_cloned.ping(service);
 
                         if tokio::time::timeout(ping_timeout, future).await.is_err() {
-                            panic!("GrpcChanel {} Ping Timeout", service_name)
+                            return PingResult::Timeout;
                         }
+
+                        PingResult::Ok
                     })
                     .await;
 
-                    if result.is_err() {
+                    let ping_error = match result {
+                        Ok(result) => match result {
+                            PingResult::Ok => None,
+                            PingResult::Timeout => Some("Timeout".to_string()),
+                        },
+                        Err(err) => Some(format!("Error: {:?}", err)),
+                    };
+
+                    if let Some(err) = ping_error {
                         my_logger::LOGGER.write_warning(
                             "GrpcChannel::ping_channel",
                             "Ping fail. Disconnecting channel".to_string(),
-                            LogEventCtx::new().add("GrpcClient", service_name),
+                            LogEventCtx::new()
+                                .add("GrpcClient", service_name)
+                                .add("FailType", err),
                         );
-
                         {
                             let mut access = channel_pool.lock().await;
                             access.disconnect_channel();
@@ -213,6 +224,11 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
             }
         });
     }
+}
+
+pub enum PingResult {
+    Ok,
+    Timeout,
 }
 
 impl From<Elapsed> for GrpcReadError {
