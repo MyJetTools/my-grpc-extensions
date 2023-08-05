@@ -98,7 +98,11 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     Ok(channel) => {
                         {
                             let mut access = self.channel_pool.lock().await;
-                            access.set(self.service_factory.get_service_name(), channel.clone());
+                            access.set(
+                                self.service_factory.get_service_name(),
+                                grpc_address,
+                                channel.clone(),
+                            );
                         }
                         return Ok(RentedChannel::new(
                             channel,
@@ -167,16 +171,18 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     };
 
                     if let Some(err) = ping_error {
-                        my_logger::LOGGER.write_warning(
-                            "GrpcChannel::ping_channel",
-                            "Ping fail. Disconnecting channel".to_string(),
-                            LogEventCtx::new()
-                                .add("GrpcClient", service_name)
-                                .add("FailType", err),
-                        );
                         {
                             let mut access = channel_pool.lock().await;
-                            access.disconnect_channel();
+                            if let Some(host) = access.disconnect_channel() {
+                                my_logger::LOGGER.write_warning(
+                                    "GrpcChannel::ping_channel",
+                                    "Ping fail. Disconnecting channel".to_string(),
+                                    LogEventCtx::new()
+                                        .add("GrpcClient", service_name)
+                                        .add("Host", host)
+                                        .add("FailType", err),
+                                );
+                            }
                         }
 
                         create_channel = true;
@@ -197,7 +203,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             match channel {
                                 Ok(channel) => {
                                     let mut access = channel_pool.lock().await;
-                                    access.set(service_name, channel.clone());
+                                    access.set(service_name, grpc_address, channel.clone());
                                 }
                                 Err(err) => {
                                     my_logger::LOGGER.write_error(
@@ -206,15 +212,19 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                                             "Can not connect to the channel {:?}. Err: {:?}",
                                             end_point, err
                                         ),
-                                        LogEventCtx::new().add("GrpcClient", service_name),
+                                        LogEventCtx::new()
+                                            .add("GrpcClient", service_name)
+                                            .add("Host", grpc_address),
                                     );
                                 }
                             }
                         } else {
                             my_logger::LOGGER.write_error(
                                 "GrpcChannel::ping_channel",
-                                format!("Invalid GrpcClient endpoint {:?}. ", end_point),
-                                LogEventCtx::new().add("GrpcClient", service_name),
+                                "Can not connect to GrpcClient",
+                                LogEventCtx::new()
+                                    .add("GrpcClient", service_name)
+                                    .add("Host", format!("{:?}", end_point)),
                             );
                         }
                     }
