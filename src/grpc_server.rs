@@ -7,7 +7,7 @@ pub async fn create_empty_stream<TDest>() -> Result<
     tonic::Response<
         Pin<
             Box<
-                dyn tonic::codegen::futures_core::Stream<Item = Result<TDest, tonic::Status>>
+                dyn futures_util::Stream<Item = Result<TDest, tonic::Status>>
                     + Send
                     + Sync
                     + 'static,
@@ -35,7 +35,7 @@ pub async fn send_single_item_to_stream<TDest>(
     tonic::Response<
         Pin<
             Box<
-                dyn tonic::codegen::futures_core::Stream<Item = Result<TDest, tonic::Status>>
+                dyn futures_util::Stream<Item = Result<TDest, tonic::Status>>
                     + Send
                     + Sync
                     + 'static,
@@ -85,7 +85,7 @@ pub async fn send_vec_to_stream<TSrc, TDest>(
     tonic::Response<
         Pin<
             Box<
-                dyn tonic::codegen::futures_core::Stream<Item = Result<TDest, tonic::Status>>
+                dyn futures_util::Stream<Item = Result<TDest, tonic::Status>>
                     + Send
                     + Sync
                     + 'static,
@@ -147,7 +147,7 @@ pub async fn send_vec_to_stream_by_chunks<TSrc, TDest, TDestChunk>(
     tonic::Response<
         Pin<
             Box<
-                dyn tonic::codegen::futures_core::Stream<Item = Result<TDestChunk, tonic::Status>>
+                dyn futures_util::Stream<Item = Result<TDestChunk, tonic::Status>>
                     + Send
                     + Sync
                     + 'static,
@@ -238,7 +238,7 @@ pub async fn send_hash_map_to_stream<TKeySrc, TValueSrc, TDest, TFn>(
     tonic::Response<
         Pin<
             Box<
-                dyn tonic::codegen::futures_core::Stream<Item = Result<TDest, tonic::Status>>
+                dyn futures_util::Stream<Item = Result<TDest, tonic::Status>>
                     + Send
                     + Sync
                     + 'static,
