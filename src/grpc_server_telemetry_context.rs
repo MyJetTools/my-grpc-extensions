@@ -1,7 +1,7 @@
-use std::net::SocketAddr;
-
+#[cfg(feature = "with-telemetry")]
 use my_telemetry::MyTelemetryContext;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
+use std::net::SocketAddr;
 
 pub struct GrpcServerTelemetryContext {
     ctx: Option<MyTelemetryContext>,
