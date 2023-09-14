@@ -1,5 +1,6 @@
 #[cfg(feature = "with-telemetry")]
 use my_telemetry::MyTelemetryContext;
+use my_telemetry::TelemetryEventTag;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
 use std::net::SocketAddr;
 
@@ -34,8 +35,12 @@ impl Drop for GrpcServerTelemetryContext {
             return;
         }
 
-        let addr = if let Some(addr) = self.addr {
-            addr.to_string().into()
+        let tags = if let Some(addr) = self.addr {
+            vec![TelemetryEventTag {
+                key: "ip".to_string(),
+                value: addr.ip().to_string(),
+            }]
+            .into()
         } else {
             None
         };
@@ -53,7 +58,7 @@ impl Drop for GrpcServerTelemetryContext {
                             started,
                             format!("GRPC: {}", method),
                             "done".to_string(),
-                            addr,
+                            tags,
                         )
                         .await;
                 });
