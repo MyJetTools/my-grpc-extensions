@@ -13,6 +13,7 @@ use super::proto_file_reader::ProtoServiceDescription;
 pub fn generate(
     attr: TokenStream,
     input: TokenStream,
+    with_telemetry: bool,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
 
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -79,24 +80,43 @@ pub fn generate(
         }
     }
     
-    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides);
+    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry);
+
+
+    let fn_create_service = if with_telemetry{
+        quote::quote!{
+            fn create_service(&self, channel: tonic::transport::Channel, ctx: &my_telemetry::MyTelemetryContext) -> TGrpcService {
+                #grpc_service_name_token::with_interceptor(
+                  channel,
+                  my_grpc_extensions::GrpcClientInterceptor::new(ctx.clone()),
+                )
+            }
+        }
+    }else{
+        quote::quote!{
+          fn create_service(&self, channel: tonic::transport::Channel) -> TGrpcService {
+             #grpc_service_name_token::new(channel)
+             }
+        }
+    };
+
+    let t_grpc_service = if with_telemetry{
+        quote::quote!(#grpc_service_name_token<tonic::codegen::InterceptedService<tonic::transport::Channel, my_grpc_extensions::GrpcClientInterceptor>>)
+    }else{
+        quote::quote!(#grpc_service_name_token<tonic::transport::Channel>)
+    };
 
     Ok(quote::quote! {
 
         #(#use_name_spaces;)*
 
-        type TGrpcService = #grpc_service_name_token<tonic::codegen::InterceptedService<tonic::transport::Channel, my_grpc_extensions::GrpcClientInterceptor>>;
+        type TGrpcService = #t_grpc_service;
 
         struct MyGrpcServiceFactory;
 
         #[async_trait::async_trait]
         impl my_grpc_extensions::GrpcServiceFactory<TGrpcService> for MyGrpcServiceFactory {
-        fn create_service(&self, channel: tonic::transport::Channel, ctx: &my_telemetry::MyTelemetryContext) -> TGrpcService {
-            #grpc_service_name_token::with_interceptor(
-              channel,
-              my_grpc_extensions::GrpcClientInterceptor::new(ctx.clone()),
-            )
-        }
+         #fn_create_service
 
         fn get_service_name(&self) -> &'static str {
             #struct_name::get_service_name()
@@ -107,7 +127,9 @@ pub fn generate(
         }
       }
 
-      #ast
+      pub struct #struct_name{
+        channel: my_grpc_extensions::GrpcChannel<TGrpcService>,
+      }
 
       impl #struct_name{
         pub fn new(get_grpc_address: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>,) -> Self {

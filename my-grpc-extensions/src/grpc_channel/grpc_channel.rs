@@ -1,6 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use my_logger::LogEventCtx;
+#[cfg(feature = "with-telemetry")]
 use my_telemetry::MyTelemetryContext;
 
 use tokio::{sync::Mutex, time::error::Elapsed};
@@ -22,7 +23,11 @@ pub trait GrpcClientSettings {
 
 #[async_trait::async_trait]
 pub trait GrpcServiceFactory<TService: Send + Sync + 'static> {
-    fn create_service(&self, channel: Channel, ctx: &MyTelemetryContext) -> TService;
+    fn create_service(
+        &self,
+        channel: Channel,
+        #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
+    ) -> TService;
     fn get_service_name(&self) -> &'static str;
     async fn ping(&self, service: TService);
 }
@@ -62,7 +67,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
     pub async fn get_channel(
         &self,
-        ctx: &MyTelemetryContext,
+        #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
     ) -> Result<RentedChannel<TService>, GrpcReadError> {
         {
             let mut access = self.channel_pool.lock().await;
@@ -71,6 +76,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     channel,
                     self.request_timeout,
                     self.service_factory.clone(),
+                    #[cfg(feature = "with-telemetry")]
                     ctx.clone(),
                 ));
             }
@@ -108,6 +114,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             channel,
                             self.request_timeout,
                             self.service_factory.clone(),
+                            #[cfg(feature = "with-telemetry")]
                             ctx.clone(),
                         ));
                     }
@@ -146,8 +153,11 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                 let mut create_channel = false;
 
                 if let Some(channel) = channel {
-                    let service =
-                        service_factory.create_service(channel, &MyTelemetryContext::new());
+                    let service = service_factory.create_service(
+                        channel,
+                        #[cfg(feature = "with-telemetry")]
+                        &MyTelemetryContext::new(),
+                    );
 
                     let service_factory_cloned = service_factory.clone();
 
