@@ -1,23 +1,7 @@
-[package]
-name = "my-grpc-extensions"
-version = "0.4.1"
-edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[features]
-default = []
-adjust-server-stream = []
-with-telemetry = []
-
-[dependencies]
-my-telemetry = { tag = "0.3.0", git = "https://github.com/MyJetTools/my-telemetry.git" }
-my-logger = { tag = "0.2.1", git = "https://github.com/MyJetTools/my-logger.git" }
-rust-extensions = { tag = "0.1.3", git = "https://github.com/MyJetTools/rust-extensions.git" }
-
-tokio = { version = "*", features = ["full"] }
-tonic = { version = "*", features = ["tls", "tls-roots", "prost"] }
-futures-util = "*"
-tokio-stream = "*"
-futures = "*"
-async-trait = "*"
+[workspace]
+members = [
+    "my-grpc-extensions",
+    "my-grpc-client-macros",
+    "my-grpc-server-macros",
+    "external-dependencies",
+]

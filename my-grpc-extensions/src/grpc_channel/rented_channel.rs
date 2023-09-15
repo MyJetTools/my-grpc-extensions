@@ -1,9 +1,9 @@
-#[cfg(feature = "with-telemetry")]
-use my_telemetry::MyTelemetryContext;
 use std::{
     sync::{atomic::AtomicBool, Arc},
     time::Duration,
 };
+
+use my_telemetry::MyTelemetryContext;
 
 use tonic::transport::Channel;
 
@@ -14,7 +14,6 @@ pub struct RentedChannel<TService: Send + Sync + 'static> {
     channel_is_alive: AtomicBool,
     pub timeout: Duration,
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
-    #[cfg(feature = "with-telemetry")]
     ctx: MyTelemetryContext,
 }
 
@@ -23,14 +22,13 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         channel: Channel,
         timeout: Duration,
         service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
-        #[cfg(feature = "with-telemetry")] ctx: MyTelemetryContext,
+        ctx: MyTelemetryContext,
     ) -> Self {
         Self {
             channel: Some(channel),
             channel_is_alive: AtomicBool::new(true),
             timeout,
             service_factory,
-            #[cfg(feature = "with-telemetry")]
             ctx,
         }
     }
@@ -65,16 +63,9 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         remove
     }
 
-    pub fn get_service(
-        &self,
-        #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
-    ) -> TService {
+    pub fn get_service(&self, ctx: &MyTelemetryContext) -> TService {
         let channel = self.get_channel();
-        self.service_factory.create_service(
-            channel,
-            #[cfg(feature = "with-telemetry")]
-            ctx,
-        )
+        self.service_factory.create_service(channel, ctx)
     }
 
     pub async fn handle_error(
@@ -122,10 +113,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         request_data: TRequest,
         grpc_executor: &TExecutor,
     ) -> Result<TResponse, GrpcReadError> {
-        let service = self.get_service(
-            #[cfg(feature = "with-telemetry")]
-            &self.ctx,
-        );
+        let service = self.get_service(&self.ctx);
 
         let future = grpc_executor.execute(service, request_data);
 
@@ -160,10 +148,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         request_data: TRequest,
         grpc_executor: &TExecutor,
     ) -> Result<tonic::Streaming<TResponse>, GrpcReadError> {
-        let service = self.get_service(
-            #[cfg(feature = "with-telemetry")]
-            &self.ctx,
-        );
+        let service = self.get_service(&self.ctx);
 
         let future = grpc_executor.execute(service, request_data);
 
@@ -197,10 +182,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         request_data: Vec<TRequest>,
         grpc_executor: &TExecutor,
     ) -> Result<TResponse, GrpcReadError> {
-        let service = self.get_service(
-            #[cfg(feature = "with-telemetry")]
-            &self.ctx,
-        );
+        let service = self.get_service(&self.ctx);
 
         let future = grpc_executor.execute(service, request_data);
 
@@ -235,10 +217,7 @@ impl<TService: Send + Sync + 'static> RentedChannel<TService> {
         request_data: Vec<TRequest>,
         grpc_executor: &TExecutor,
     ) -> Result<tonic::Streaming<TResponse>, GrpcReadError> {
-        let service = self.get_service(
-            #[cfg(feature = "with-telemetry")]
-            &self.ctx,
-        );
+        let service = self.get_service(&self.ctx);
 
         let future = grpc_executor.execute(service, request_data);
 
