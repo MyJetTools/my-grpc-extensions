@@ -8,6 +8,7 @@ edition = "2021"
 [features]
 default = []
 adjust-server-stream = []
+with-telemetry = []
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
 
@@ -25,7 +26,7 @@ futures-util = "*"
 tokio-stream = "*"
 futures = "*"
 async-trait = "*"
-my-grpc-client-macros = {optional = true, path = "../my-grpc-client-macros" }
-my-grpc-server-macros = {optional = true, path = "../my-grpc-server-macros" }
-external-dependencies = {path = "../external-dependencies" }
+my-grpc-client-macros = { optional = true, path = "../my-grpc-client-macros" }
+my-grpc-server-macros = { optional = true, path = "../my-grpc-server-macros" }
+external-dependencies = { path = "../external-dependencies" }
 futures-core = "*"

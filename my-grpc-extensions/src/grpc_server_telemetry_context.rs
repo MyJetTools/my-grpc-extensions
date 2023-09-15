@@ -1,4 +1,4 @@
-// #[cfg(feature = "with-telemetry")]
+#[cfg(feature = "with-telemetry")]
 use my_telemetry::MyTelemetryContext;
 use my_telemetry::TelemetryEventTag;
 use rust_extensions::date_time::DateTimeAsMicroseconds;
