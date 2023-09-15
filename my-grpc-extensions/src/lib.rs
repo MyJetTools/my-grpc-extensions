@@ -10,3 +10,11 @@ pub mod read_grpc_stream;
 pub use grpc_channel::*;
 #[cfg(feature = "with-telemetry")]
 pub use grpc_client_interceptor::*;
+
+pub extern crate external_dependencies as prelude;
+
+#[cfg(feature = "grpc-client")]
+pub extern crate my_grpc_client_macros as client;
+
+#[cfg(feature = "grpc-server")]
+pub extern crate my_grpc_server_macros as server;
