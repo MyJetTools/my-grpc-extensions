@@ -8,7 +8,7 @@ edition = "2021"
 [features]
 default = []
 adjust-server-stream = []
-with-telemetry = []
+with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
 
@@ -16,7 +16,7 @@ grpc-server = ["my-grpc-server-macros"]
 [dependencies]
 my-telemetry = { tag = "1.0.1", git = "https://github.com/MyJetTools/my-telemetry.git", features = [
     "my-telemetry-writer",
-] }
+], optional = true }
 
 my-logger = { tag = "0.2.1", git = "https://github.com/MyJetTools/my-logger.git" }
 rust-extensions = { tag = "0.1.3", git = "https://github.com/MyJetTools/rust-extensions.git" }
