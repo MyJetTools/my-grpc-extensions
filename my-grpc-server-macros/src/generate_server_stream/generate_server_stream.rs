@@ -21,7 +21,7 @@ pub fn generate_server_stream(tokens: TokenStream) -> Result<TokenStream, syn::E
                 + Sync
                 + 'static,
         >,
-    >
+    >;
     }
     .into())
 }
