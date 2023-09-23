@@ -10,5 +10,6 @@ pub fn generate_server_stream(tokens: TokenStream) -> Result<TokenStream, syn::E
     Ok(crate::generate_stream::generate_stream(
         stream_name.unwrap_as_string_value()?.as_str(),
         item_name.unwrap_as_string_value()?.as_str(),
-    ))
+    )
+    .into())
 }

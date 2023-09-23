@@ -10,10 +10,19 @@ pub fn generate(
 
     let stream_name = find_stream_name(content.as_str());
 
-    Ok(crate::generate_stream::generate_stream(
+    let stream_implementation = crate::generate_stream::generate_stream(
         stream_name,
         item_name.unwrap_as_string_value()?.as_str(),
-    ))
+    );
+
+    let input: proc_macro2::TokenStream = input.into();
+
+    let result = quote::quote! {
+        #stream_implementation
+        #input
+    };
+
+    Ok(result.into())
 }
 
 fn find_stream_name(content: &str) -> &str {

@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-pub fn generate_stream(stream_name: &str, item_name: &str) -> proc_macro::TokenStream {
+pub fn generate_stream(stream_name: &str, item_name: &str) -> proc_macro2::TokenStream {
     let stream_name = proc_macro2::TokenStream::from_str(stream_name).unwrap();
     let item_name = proc_macro2::TokenStream::from_str(item_name).unwrap();
     quote::quote! {
@@ -13,5 +13,4 @@ pub fn generate_stream(stream_name: &str, item_name: &str) -> proc_macro::TokenS
         >,
     >;
     }
-    .into()
 }
