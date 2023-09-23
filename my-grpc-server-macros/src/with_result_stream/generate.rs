@@ -4,6 +4,8 @@ pub fn generate(
 ) -> Result<proc_macro::TokenStream, syn::Error> {
     let content = input.to_string();
 
+    println!("content: {}", content);
+
     let index = content.find("tonic::Response<Self::");
 
     if index.is_none() {
