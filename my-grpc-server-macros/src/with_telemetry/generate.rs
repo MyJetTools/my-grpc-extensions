@@ -1,8 +1,7 @@
-use std::str::FromStr;
-
 use proc_macro::Delimiter;
 use proc_macro::Group;
 use proc_macro::TokenStream;
+use quote::ToTokens;
 
 pub fn generate(
     _attr: TokenStream,
@@ -55,6 +54,28 @@ pub fn generate(
 }
 
 fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
+    let to_inject = quote::quote! {
+        let my_telemetry = my_grpc_extensions::get_telemetry(
+            &request.metadata(),
+            request.remote_addr(),
+            #fn_name,
+        );
+
+        let my_telemetry = my_telemetry.get_ctx();
+    };
+
+    let tokens_to_insert: Vec<proc_macro2::TokenTree> =
+        to_inject.into_token_stream().into_iter().collect();
+
+    let result = crate::tokens_stream_utils::insert_inside_token(
+        group.stream().into(),
+        &["let", "request", "=", "request", ".", "into_inner"],
+        tokens_to_insert,
+    );
+
+    result
+
+    /*
     let mut as_str = group.to_string();
 
     let index = as_str.find("let request = request.into_inner()");
@@ -84,4 +105,5 @@ fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
             as_str
         ),
     }
+     */
 }
