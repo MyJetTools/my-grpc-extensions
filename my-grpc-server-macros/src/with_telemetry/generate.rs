@@ -2,6 +2,7 @@ use proc_macro::Delimiter;
 use proc_macro::Group;
 use proc_macro::TokenStream;
 use quote::ToTokens;
+use types_reader::token_stream_utils::*;
 
 pub fn generate(
     _attr: TokenStream,
@@ -67,7 +68,7 @@ fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
     let tokens_to_insert: Vec<proc_macro2::TokenTree> =
         to_inject.into_token_stream().into_iter().collect();
 
-    let result = crate::tokens_stream_utils::insert_inside_token(
+    let result = insert_token_before_sequence(
         group.stream().into(),
         &["let", "request", "=", "request", ".", "into_inner"],
         tokens_to_insert,
