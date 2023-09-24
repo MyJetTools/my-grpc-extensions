@@ -149,4 +149,28 @@ mod tests {
             }
         }
     }
+
+    #[test]
+    fn test_simple_case() {
+        let src = r#"
+        pub fn test(){
+            let request = request.into_inner();
+        }
+        "#;
+
+        let tokens = TokenStream::from_str(src).unwrap();
+
+        let tokens_to_insert = TokenStream::from_str("let a = 5;").unwrap();
+
+        let tokens_to_insert: Vec<proc_macro2::TokenTree> =
+            tokens_to_insert.into_token_stream().into_iter().collect();
+
+        let result = insert_inside_token(
+            tokens,
+            &["let", "request", "=", "request", ".", "into_inner"],
+            tokens_to_insert,
+        );
+
+        println!("{}", result.to_string());
+    }
 }

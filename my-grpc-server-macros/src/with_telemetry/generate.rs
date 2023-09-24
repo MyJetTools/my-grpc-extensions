@@ -31,7 +31,7 @@ pub fn generate(
                     if let Some(fn_name) = &fn_name {
                         if let Delimiter::Brace = group.delimiter() {
                             let token_stream = inject_body(fn_name, group);
-                            result.push(token_stream);
+                            result.push(quote::quote!({ #token_stream }));
                             injection_is_done = true;
                             continue;
                         }
