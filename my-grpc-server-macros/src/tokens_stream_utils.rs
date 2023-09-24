@@ -1,4 +1,4 @@
-use proc_macro2::{TokenStream, TokenTree};
+use proc_macro2::{Group, TokenStream, TokenTree};
 use quote::ToTokens;
 
 pub fn insert_inside_token(
@@ -32,12 +32,19 @@ fn iterate_token_stream(
     for token in token_stream {
         match &token {
             proc_macro2::TokenTree::Group(group) => {
-                result.extend(iterate_token_stream(
+                let tokens = iterate_token_stream(
                     group.stream(),
                     sequence,
                     tokens_to_insert,
                     insert_is_done,
-                ));
+                );
+
+                result.push(TokenTree::Group(Group::new(
+                    group.delimiter(),
+                    quote::quote!(
+                        #(#tokens)*
+                    ),
+                )));
             }
             _ => {
                 if !*insert_is_done {
