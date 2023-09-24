@@ -5,7 +5,7 @@ pub fn insert_inside_token(
     src: TokenStream,
     sequence: &[&str],
     tokens_to_insert: Vec<TokenTree>,
-) -> TokenStream {
+) -> Option<TokenStream> {
     let mut insert_is_done = false;
     let result = iterate_token_stream(
         src.into_token_stream(),
@@ -13,9 +13,14 @@ pub fn insert_inside_token(
         &tokens_to_insert,
         &mut insert_is_done,
     );
+
+    if !insert_is_done {
+        return None;
+    }
     quote::quote!(
         #(#result)*
     )
+    .into()
 }
 
 fn iterate_token_stream(
@@ -54,8 +59,6 @@ fn iterate_token_stream(
                                 result.insert(index_to_insert, token.clone());
                                 index_to_insert += 1;
                             }
-
-                            println!("Injection is done");
 
                             *insert_is_done = true;
                         }
@@ -127,7 +130,7 @@ mod tests {
             tokens_to_insert,
         );
 
-        print_result(result);
+        print_result(result.unwrap());
     }
 
     fn print_result(result: TokenStream) {
@@ -171,6 +174,6 @@ mod tests {
             tokens_to_insert,
         );
 
-        println!("{}", result.to_string());
+        println!("{}", result.unwrap().to_string());
     }
 }

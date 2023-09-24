@@ -73,7 +73,11 @@ fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
         tokens_to_insert,
     );
 
-    result
+    if result.is_none() {
+        panic!("Could not find 'let request = request.into_inner()' in fn body");
+    }
+
+    result.unwrap()
 
     /*
     let mut as_str = group.to_string();
