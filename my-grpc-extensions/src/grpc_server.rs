@@ -77,7 +77,7 @@ where
 }
 
 pub async fn send_vec_to_stream<TSrc, TDest>(
-    src: Vec<TSrc>,
+    src: impl Iterator<Item = TSrc> + Send + Sync + 'static,
     mapping: impl Fn(TSrc) -> TDest + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
     #[cfg(feature = "adjust-server-stream")] send_timeout: Duration,
@@ -95,7 +95,7 @@ pub async fn send_vec_to_stream<TSrc, TDest>(
     tonic::Status,
 >
 where
-    TSrc: Send + Sync + 'static,
+    TSrc: Send + Sync + Debug + 'static,
     TDest: Send + Sync + Debug + 'static,
 {
     #[cfg(not(feature = "adjust-server-stream"))]
