@@ -20,3 +20,4 @@ pub extern crate my_grpc_client_macros as client;
 pub extern crate my_grpc_server_macros as server;
 
 pub extern crate hyper;
+pub extern crate tonic;
