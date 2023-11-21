@@ -23,7 +23,7 @@ rust-extensions = { tag = "0.1.4", git = "https://github.com/MyJetTools/rust-ext
     "with-tokio",
 ] }
 tokio = { version = "*", features = ["full"] }
-tonic = { version = "0.10.2", features = ["tls", "tls-roots", "prost"] }
+tonic = { version = "0", features = ["tls", "tls-roots", "prost"] }
 hyper = { version = "0" }
 futures-util = "*"
 tokio-stream = "*"
