@@ -18,3 +18,5 @@ pub extern crate my_grpc_client_macros as client;
 
 #[cfg(feature = "grpc-server")]
 pub extern crate my_grpc_server_macros as server;
+
+pub extern crate hyper;
