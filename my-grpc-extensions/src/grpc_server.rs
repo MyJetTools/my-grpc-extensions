@@ -229,7 +229,7 @@ where
     return Ok(tonic::Response::new(response));
 }
 
-pub async fn send_hash_map_to_stream<TKeySrc, TValueSrc, TDest, TFn>(
+pub async fn send_hash_map_to_stream<TKeySrc, TValueSrc, TDest>(
     src: std::collections::HashMap<TKeySrc, TValueSrc>,
     mapping: impl Fn(TKeySrc, TValueSrc) -> TDest + Send + Sync + 'static,
     #[cfg(feature = "adjust-server-stream")] channel_size: usize,
