@@ -68,14 +68,22 @@ fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
     let tokens_to_insert: Vec<proc_macro2::TokenTree> =
         to_inject.into_token_stream().into_iter().collect();
 
-    let result = insert_token_before_sequence(
+    let mut result = insert_token_before_sequence(
         group.stream().into(),
         &["let", "request", "=", "request", ".", "into_inner"],
-        tokens_to_insert,
+        tokens_to_insert.clone(),
     );
 
     if result.is_none() {
-        panic!("Could not find 'let request = request.into_inner()' in fn body");
+        result = insert_token_before_sequence(
+            group.stream().into(),
+            &["let", "_request", "=", "request", ".", "into_inner"],
+            tokens_to_insert,
+        );
+
+        if result.is_none() {
+            panic!("Could not find 'let request = request.into_inner()' in fn body");
+        }
     }
 
     result.unwrap()
