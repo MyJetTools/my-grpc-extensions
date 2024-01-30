@@ -78,11 +78,19 @@ fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
         result = insert_token_before_sequence(
             group.stream().into(),
             &["let", "_request", "=", "request", ".", "into_inner"],
-            tokens_to_insert,
+            tokens_to_insert.clone(),
         );
 
         if result.is_none() {
-            panic!("Could not find 'let request = request.into_inner()' in fn body");
+            result = insert_token_before_sequence(
+                group.stream().into(),
+                &["let", "mut", "request", "=", "request", ".", "into_inner"],
+                tokens_to_insert,
+            );
+
+            if result.is_none() {
+                panic!("Could not find 'let request = request.into_inner()' in fn body");
+            }
         }
     }
 
