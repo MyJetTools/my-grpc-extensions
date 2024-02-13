@@ -44,9 +44,9 @@ pub fn generate_grpc_methods(
         };
 
         let get_channel = if width_telemetry {
-            quote::quote!(self.channel.get_channel(ctx).await.unwrap())
+            quote::quote!(self.channel.get_channel(ctx).await?)
         } else {
-            quote::quote!(self.channel.get_channel().await.unwrap())
+            quote::quote!(self.channel.get_channel().await?)
         };
 
         let item = quote::quote! {
