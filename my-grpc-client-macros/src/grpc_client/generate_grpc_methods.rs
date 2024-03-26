@@ -64,7 +64,7 @@ pub fn generate_grpc_methods(
                         let addr = self.channel.get_connect_url().await;
                         my_logger::LOGGER.write_error(
                             #log_fn_name,
-                            format!("{:?}", err),
+                            format!("Error getting channel. {:?}", err),
                             my_logger::LogEventCtx::new()
                                 .add("ServiceName", Self::get_service_name())
                                 .add("Host", addr),
