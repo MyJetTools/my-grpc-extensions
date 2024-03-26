@@ -45,9 +45,9 @@ pub fn generate_grpc_methods(
         };
 
         let get_channel = if width_telemetry {
-            quote::quote!(self.channel.get_channel(ctx).await?)
+            quote::quote!(self.channel.get_channel(ctx).await)
         } else {
-            quote::quote!(self.channel.get_channel().await?)
+            quote::quote!(self.channel.get_channel().await)
         };
 
         let log_fn_name = format!("{}::{}", struct_name, fn_name.to_string());
@@ -58,12 +58,12 @@ pub fn generate_grpc_methods(
                 input_data: #input_data_type,
                 #ctx_param
             ) -> Result<#output_data_type, my_grpc_extensions::GrpcReadError> {
-                let channel = #get_channel{
+                let channel = match #get_channel {
                     Ok(channel) => channel,
                     Err(err) => {
                         let addr = self.channel.get_connect_url().await;
                         my_logger::LOGGER.write_error(
-                            log_fn_name,
+                            #log_fn_name,
                             format!("{:?}", err),
                             my_logger::LogEventCtx::new()
                                 .add("ServiceName", Self::get_service_name())
