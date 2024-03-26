@@ -65,6 +65,12 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
         result
     }
 
+    pub async fn get_connect_url(&self) -> String {
+        self.get_grpc_address
+            .get_grpc_url(self.service_factory.get_service_name())
+            .await
+    }
+
     pub async fn get_channel(
         &self,
         #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
@@ -84,16 +90,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
         let mut attempt_no = 0;
         loop {
-            let grpc_address = self
-                .get_grpc_address
-                .get_grpc_url(self.service_factory.get_service_name())
-                .await;
-            let end_point = Channel::from_shared(grpc_address.clone());
+            let connect_url = self.get_connect_url().await;
+            let end_point = Channel::from_shared(connect_url.clone());
 
             if let Err(err) = end_point {
                 panic!(
                     "Failed to create channel with url:{}. Err: {:?}",
-                    grpc_address, err
+                    connect_url, err
                 )
             }
 
@@ -106,7 +109,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                             let mut access = self.channel_pool.lock().await;
                             access.set(
                                 self.service_factory.get_service_name(),
-                                grpc_address,
+                                connect_url,
                                 channel.clone(),
                             );
                         }
