@@ -68,8 +68,6 @@ pub fn generate(
     }else{
         struct_name.to_string()
     };
-    
-
 
     for (override_fn_name, fn_override) in &overrides{
         if !proto_file.has_method(override_fn_name){
@@ -80,7 +78,7 @@ pub fn generate(
         }
     }
     
-    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry);
+    let grpc_methods = super::generate_grpc_methods(struct_name.to_string(), &proto_file, retries, &overrides, with_telemetry);
 
 
     let fn_create_service = if with_telemetry{

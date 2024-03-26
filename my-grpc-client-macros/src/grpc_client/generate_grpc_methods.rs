@@ -3,6 +3,7 @@ use std::{collections::HashMap, str::FromStr};
 use super::{fn_override::FnOverride, proto_file_reader::ProtoServiceDescription, ParamType};
 
 pub fn generate_grpc_methods(
+    struct_name: String,
     proto_file: &ProtoServiceDescription,
     retries_amount: usize,
     overrides: &HashMap<String, FnOverride>,
@@ -49,13 +50,29 @@ pub fn generate_grpc_methods(
             quote::quote!(self.channel.get_channel().await?)
         };
 
+        let log_fn_name = format!("{}::{}", struct_name, fn_name.to_string());
+
         let item = quote::quote! {
             pub async fn #fn_name(
                 &self,
                 input_data: #input_data_type,
                 #ctx_param
             ) -> Result<#output_data_type, my_grpc_extensions::GrpcReadError> {
-                let channel = #get_channel;
+                let channel = #get_channel{
+                    Ok(channel) => channel,
+                    Err(err) => {
+                        let addr = self.channel.get_connect_url().await;
+                        my_logger::LOGGER.write_error(
+                            log_fn_name,
+                            format!("{:?}", err),
+                            my_logger::LogEventCtx::new()
+                                .add("ServiceName", Self::get_service_name())
+                                .add("Host", addr),
+                        );
+
+                        return Err(err);
+                    }
+                };
 
                 let result = channel
                     .#request_fn_name(input_data)
