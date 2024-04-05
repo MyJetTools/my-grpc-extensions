@@ -215,7 +215,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
                     let end_point = Channel::from_shared(grpc_address.clone());
 
-                    if let Ok(end_point) = end_point {
+                    if let Ok(mut end_point) = end_point {
+                        if grpc_address.to_lowercase().starts_with("https") {
+                            let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
+                            let tls = ClientTlsConfig::new().ca_certificate(cert);
+                            end_point = end_point.tls_config(tls).unwrap();
+                        }
+
                         if let Ok(channel) =
                             tokio::time::timeout(request_timeout, end_point.connect()).await
                         {
