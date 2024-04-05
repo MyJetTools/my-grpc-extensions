@@ -268,8 +268,11 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
 fn extract_domain_name(src: &str) -> &str {
     let start = src.find("://").map(|index| index + 3).unwrap_or(0);
+
+    let src = &src[start..];
+
     let end = src.find(":").unwrap_or(src.len());
-    &src[start..end]
+    &src[..end]
 }
 
 pub enum PingResult {
@@ -292,5 +295,17 @@ impl From<tonic::Status> for GrpcReadError {
 impl From<tonic::transport::Error> for GrpcReadError {
     fn from(value: tonic::transport::Error) -> Self {
         Self::TransportError(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::grpc_channel::grpc_channel::extract_domain_name;
+
+    #[test]
+    fn test_extracting_domain_name() {
+        assert_eq!(extract_domain_name("https://localhost:5000"), "localhost");
+
+        assert_eq!(extract_domain_name("https://localhost"), "localhost");
     }
 }
