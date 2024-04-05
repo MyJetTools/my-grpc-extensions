@@ -104,7 +104,9 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
             if connect_url.to_lowercase().starts_with("https") {
                 let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
-                let tls = ClientTlsConfig::new().ca_certificate(cert);
+                let tls = ClientTlsConfig::new()
+                    .ca_certificate(cert)
+                    .domain_name(extract_domain_name(connect_url.as_str()));
                 end_point = end_point.tls_config(tls).unwrap();
             }
 
@@ -218,7 +220,10 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                     if let Ok(mut end_point) = end_point {
                         if grpc_address.to_lowercase().starts_with("https") {
                             let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
-                            let tls = ClientTlsConfig::new().ca_certificate(cert);
+                            let tls = ClientTlsConfig::new()
+                                .ca_certificate(cert)
+                                .domain_name(extract_domain_name(grpc_address.as_str()));
+
                             end_point = end_point.tls_config(tls).unwrap();
                         }
 
@@ -259,6 +264,12 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
             }
         });
     }
+}
+
+fn extract_domain_name(src: &str) -> &str {
+    let start = src.find("://").map(|index| index + 3).unwrap_or(0);
+    let end = src.find(":").unwrap_or(src.len());
+    &src[start..end]
 }
 
 pub enum PingResult {
