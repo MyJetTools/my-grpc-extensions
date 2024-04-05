@@ -5,7 +5,7 @@ use my_logger::LogEventCtx;
 use my_telemetry::MyTelemetryContext;
 
 use tokio::{sync::Mutex, time::error::Elapsed};
-use tonic::transport::Channel;
+use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 
 use crate::{GrpcChannelPool, RentedChannel};
 
@@ -100,7 +100,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                 )
             }
 
-            let end_point = end_point.unwrap();
+            let mut end_point = end_point.unwrap();
+
+            if connect_url.to_lowercase().starts_with("https") {
+                let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
+                let tls = ClientTlsConfig::new().ca_certificate(cert);
+                end_point = end_point.tls_config(tls).unwrap();
+            }
 
             match tokio::time::timeout(self.request_timeout, end_point.connect()).await {
                 Ok(channel) => match channel {

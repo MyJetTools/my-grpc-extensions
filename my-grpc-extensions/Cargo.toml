@@ -22,6 +22,8 @@ my-logger = { tag = "1.1.0", git = "https://github.com/MyJetTools/my-logger.git"
 rust-extensions = { tag = "0.1.4", git = "https://github.com/MyJetTools/rust-extensions.git", features = [
     "with-tokio",
 ] }
+
+my-tls = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-tls.git" }
 tokio = { version = "*", features = ["full"] }
 tonic = { version = "0", features = ["tls", "tls-roots", "prost"] }
 hyper = { version = "0" }
