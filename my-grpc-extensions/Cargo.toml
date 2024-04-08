@@ -11,6 +11,7 @@ adjust-server-stream = []
 with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
+with-tls = ["my-tls"]
 
 
 [dependencies]
@@ -23,7 +24,8 @@ rust-extensions = { tag = "0.1.4", git = "https://github.com/MyJetTools/rust-ext
     "with-tokio",
 ] }
 
-my-tls = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-tls.git" }
+
+my-tls = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-tls.git", optional = true }
 tokio = { version = "*", features = ["full"] }
 tonic = { version = "0", features = ["tls", "tls-roots", "prost"] }
 hyper = { version = "0" }

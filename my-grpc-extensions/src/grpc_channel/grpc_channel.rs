@@ -5,7 +5,10 @@ use my_logger::LogEventCtx;
 use my_telemetry::MyTelemetryContext;
 
 use tokio::{sync::Mutex, time::error::Elapsed};
-use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+use tonic::transport::Channel;
+
+#[cfg(feature = "with-tls")]
+use tonic::transport::{Certificate, ClientTlsConfig};
 
 use crate::{GrpcChannelPool, RentedChannel};
 
@@ -100,8 +103,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
                 )
             }
 
+            #[cfg(feature = "with-tls")]
             let mut end_point = end_point.unwrap();
 
+            #[cfg(not(feature = "with-tls"))]
+            let end_point = end_point.unwrap();
+
+            #[cfg(feature = "with-tls")]
             if connect_url.to_lowercase().starts_with("https") {
                 let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
                 let tls = ClientTlsConfig::new()
@@ -217,9 +225,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
 
                     let end_point = Channel::from_shared(grpc_address.clone());
 
-                    if let Ok(mut end_point) = end_point {
+                    if let Ok(end_point) = end_point {
+                        #[cfg(feature = "with-tls")]
+                        let mut end_point = end_point;
+                        #[cfg(feature = "with-tls")]
                         if grpc_address.to_lowercase().starts_with("https") {
                             let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
+
                             let tls = ClientTlsConfig::new()
                                 .ca_certificate(cert)
                                 .domain_name(extract_domain_name(grpc_address.as_str()));
@@ -266,6 +278,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannel<TService> {
     }
 }
 
+#[cfg(feature = "with-tls")]
 fn extract_domain_name(src: &str) -> &str {
     let start = src.find("://").map(|index| index + 3).unwrap_or(0);
 
@@ -299,6 +312,7 @@ impl From<tonic::transport::Error> for GrpcReadError {
 }
 
 #[cfg(test)]
+#[cfg(feature = "with-tls")]
 mod tests {
     use crate::grpc_channel::grpc_channel::extract_domain_name;
 
