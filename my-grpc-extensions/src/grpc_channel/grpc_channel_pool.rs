@@ -7,7 +7,7 @@ use my_telemetry::MyTelemetryContext;
 use tokio::time::error::Elapsed;
 use tonic::transport::Channel;
 
-use crate::{GrpcChannel, GrpcChannelPoolInner};
+use crate::{GrpcChannel, GrpcChannelHolder};
 
 #[derive(Debug)]
 pub enum GrpcReadError {
@@ -33,7 +33,7 @@ pub trait GrpcServiceFactory<TService: Send + Sync + 'static> {
 }
 
 pub struct GrpcChannelPool<TService: Send + Sync + 'static> {
-    pub inner: Arc<GrpcChannelPoolInner>,
+    pub grpc_channel_holder: Arc<GrpcChannelHolder>,
     pub request_timeout: Duration,
     pub ping_timeout: Duration,
     pub ping_interval: Duration,
@@ -49,9 +49,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         ping_timeout: Duration,
         ping_interval: Duration,
     ) -> Self {
-        let channel_pool = Arc::new(GrpcChannelPoolInner::new());
         let result = Self {
-            inner: channel_pool,
+            grpc_channel_holder: Arc::new(GrpcChannelHolder::new()),
             request_timeout,
             ping_timeout,
             ping_interval,
@@ -69,7 +68,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
     ) -> GrpcChannel<TService> {
         return GrpcChannel::new(
-            self.inner.clone(),
+            self.grpc_channel_holder.clone(),
             self.request_timeout,
             self.service_factory.clone(),
             self.get_grpc_address.clone(),
@@ -83,14 +82,14 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         let service_name = self.service_factory.get_service_name();
         let service_factory = self.service_factory.clone();
 
-        let inner = self.inner.clone();
+        let inner = self.grpc_channel_holder.clone();
 
         let request_timeout = self.request_timeout;
         let ping_interval = self.ping_interval;
         let ping_timeout = self.ping_timeout;
         tokio::spawn(async move {
             loop {
-                let channel = match inner.rent().await {
+                let channel = match inner.reuse_existing_channel().await {
                     Some(channel) => Ok(channel),
                     None => {
                         let connect_url = get_grpc_address.get_grpc_url(service_name).await;
@@ -133,11 +132,11 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
                             Ok(result) => match result {
                                 PingResult::Ok => {}
                                 PingResult::Timeout => {
-                                    inner.disconnect_channel("Ping Timeout".to_string()).await;
+                                    inner.drop_channel("Ping Timeout".to_string()).await;
                                 }
                             },
                             Err(_) => {
-                                inner.disconnect_channel("Ping Panic".to_string()).await;
+                                inner.drop_channel("Ping Panic".to_string()).await;
                             }
                         };
                     }

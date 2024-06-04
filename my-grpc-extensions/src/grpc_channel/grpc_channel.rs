@@ -5,12 +5,12 @@ use std::{sync::Arc, time::Duration};
 use tonic::transport::Channel;
 
 use crate::{
-    GrpcChannelPoolInner, GrpcClientSettings, GrpcReadError, GrpcServiceFactory, RequestBuilder,
+    GrpcChannelHolder, GrpcClientSettings, GrpcReadError, GrpcServiceFactory, RequestBuilder,
     RequestBuilderWithInputStream,
 };
 
 pub struct GrpcChannel<TService: Send + Sync + 'static> {
-    channel_pool: Arc<GrpcChannelPoolInner>,
+    grpc_channel_holder: Arc<GrpcChannelHolder>,
     pub request_timeout: Duration,
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
     get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
@@ -20,14 +20,14 @@ pub struct GrpcChannel<TService: Send + Sync + 'static> {
 
 impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
     pub fn new(
-        channel_pool: Arc<GrpcChannelPoolInner>,
+        grpc_channel_holder: Arc<GrpcChannelHolder>,
         request_timeout: Duration,
         service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
         get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
         #[cfg(feature = "with-telemetry")] ctx: MyTelemetryContext,
     ) -> Self {
         Self {
-            channel_pool,
+            grpc_channel_holder,
             request_timeout,
             service_factory,
             get_grpc_address,
@@ -43,20 +43,20 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
     }
 
     pub async fn get_channel(&self) -> Result<Channel, GrpcReadError> {
-        if let Some(channel) = self.channel_pool.rent().await {
+        if let Some(channel) = self.grpc_channel_holder.reuse_existing_channel().await {
             return Ok(channel);
         }
 
         let connect_url = self.get_connect_url().await;
         let service_name = self.service_factory.get_service_name();
 
-        self.channel_pool
+        self.grpc_channel_holder
             .create_channel(connect_url, service_name, self.request_timeout)
             .await
     }
 
     pub async fn drop_dead_channel(&self, err: String) {
-        self.channel_pool.disconnect_channel(err).await;
+        self.grpc_channel_holder.drop_channel(err).await;
     }
 
     pub async fn drop_channel_if_needed(&self, err: &GrpcReadError) -> bool {

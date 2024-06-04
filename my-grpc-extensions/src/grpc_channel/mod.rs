@@ -1,14 +1,14 @@
 mod grpc_channel;
+mod grpc_channel_holder;
 mod grpc_channel_pool;
-mod grpc_channel_pool_inner;
 mod request_builder;
 mod request_builder_with_input_stream;
 mod request_builder_with_input_stream_with_retires;
 mod request_builder_with_retries;
 mod streamed_response;
 pub use grpc_channel::*;
+pub use grpc_channel_holder::*;
 pub use grpc_channel_pool::*;
-pub use grpc_channel_pool_inner::*;
 pub use request_builder::*;
 pub use request_builder_with_input_stream::*;
 pub use request_builder_with_input_stream_with_retires::*;

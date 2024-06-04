@@ -15,12 +15,12 @@ pub struct ChannelData {
     pub service_name: &'static str,
 }
 
-pub struct GrpcChannelPoolInner {
+pub struct GrpcChannelHolder {
     //todo!("Temporary there is no pool. Debugging retry/reconnect features - and then pool would be added.")
     pub channel: Mutex<Option<ChannelData>>,
 }
 
-impl GrpcChannelPoolInner {
+impl GrpcChannelHolder {
     pub fn new() -> Self {
         Self {
             channel: Mutex::new(None),
@@ -44,13 +44,13 @@ impl GrpcChannelPoolInner {
         });
     }
 
-    pub async fn rent(&self) -> Option<Channel> {
+    pub async fn reuse_existing_channel(&self) -> Option<Channel> {
         let channel_access = self.channel.lock().await;
 
         let channel = channel_access.as_ref()?;
         Some(channel.channel.clone())
     }
-    pub async fn disconnect_channel(&self, err: String) {
+    pub async fn drop_channel(&self, err: String) {
         let disconnected_channel = {
             let mut channel_access = self.channel.lock().await;
             channel_access.take()
