@@ -78,7 +78,7 @@ pub fn generate(
         }
     }
     
-    let grpc_methods = super::generate_grpc_methods(struct_name.to_string(), &proto_file, retries, &overrides, with_telemetry);
+    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry);
 
 
     let fn_create_service = if with_telemetry{
