@@ -21,10 +21,7 @@ use my_grpc_client_macros::generate_grpc_client;
         {fn_name:"Get", retries:2}
     ]
 )]
-pub struct KeyValueGrpcClient {
-    channel: my_grpc_extensions::GrpcChannel<TGrpcService>,
-}
-
+pub struct KeyValueGrpcClient;
 
 ```
 

@@ -126,13 +126,13 @@ pub fn generate(
       }
 
       pub struct #struct_name{
-        channel: my_grpc_extensions::GrpcChannel<TGrpcService>,
+        channel: my_grpc_extensions::GrpcChannelPool<TGrpcService>,
       }
 
       impl #struct_name{
         pub fn new(get_grpc_address: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>,) -> Self {
             Self {
-                channel: my_grpc_extensions::GrpcChannel::new(
+                channel: my_grpc_extensions::GrpcChannelPool::new(
                     get_grpc_address,
                     std::sync::Arc::new(MyGrpcServiceFactory),
                     std::time::Duration::from_secs(#timeout_sec),
