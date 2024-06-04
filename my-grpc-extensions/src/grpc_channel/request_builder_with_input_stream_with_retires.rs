@@ -1,5 +1,5 @@
 use crate::{
-    GrpcReadError, RentedChannel, RequestWithInputAsStreamGrpcExecutor,
+    GrpcChannel, GrpcReadError, RequestWithInputAsStreamGrpcExecutor,
     RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor, StreamedResponse,
 };
 
@@ -8,7 +8,7 @@ pub struct RequestBuilderWithInputStreamWithRetries<
     TRequest: Clone + Send + Sync + 'static,
 > {
     input_contract: Vec<TRequest>,
-    channel: RentedChannel<TService>,
+    channel: GrpcChannel<TService>,
     max_attempts_amount: usize,
 }
 
@@ -17,7 +17,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
 {
     pub fn new(
         input_contract: Vec<TRequest>,
-        channel: RentedChannel<TService>,
+        channel: GrpcChannel<TService>,
         max_attempts_amount: usize,
     ) -> Self {
         Self {
@@ -47,9 +47,9 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
             match result {
                 Ok(response) => return Ok(response),
                 Err(err) => {
-                    self.channel
-                        .handle_error(err, &mut attempt_no, self.max_attempts_amount)
-                        .await?;
+                    if attempt_no >= self.max_attempts_amount {
+                        return Err(err);
+                    }
                 }
             }
 
@@ -82,12 +82,15 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
 
             match result {
                 Ok(stream_to_read) => {
-                    return Ok(StreamedResponse::new(stream_to_read, self.channel.timeout));
+                    return Ok(StreamedResponse::new(
+                        stream_to_read,
+                        self.channel.request_timeout,
+                    ));
                 }
                 Err(err) => {
-                    self.channel
-                        .handle_error(err, &mut attempt_no, self.max_attempts_amount)
-                        .await?;
+                    if attempt_no >= self.max_attempts_amount {
+                        return Err(err);
+                    }
                 }
             }
 

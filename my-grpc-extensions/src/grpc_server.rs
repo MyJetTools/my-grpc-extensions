@@ -1,6 +1,7 @@
 use std::{fmt::Debug, pin::Pin, time::Duration};
 
 use tokio::sync::mpsc::error::SendTimeoutError;
+#[cfg(not(feature = "adjust-server-stream"))]
 const DEFAULT_SEND_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub async fn create_empty_stream<TDest>() -> Result<

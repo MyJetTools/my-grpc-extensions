@@ -1,18 +1,18 @@
 use crate::{
-    GrpcReadError, RentedChannel, RequestBuilderWithRetries, RequestResponseGrpcExecutor,
+    GrpcReadError, GrpcChannel, RequestBuilderWithRetries, RequestResponseGrpcExecutor,
     RequestWithResponseAsStreamGrpcExecutor, StreamedResponse,
 };
 
 pub struct RequestBuilder<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
 {
     input_contract: TRequest,
-    channel: RentedChannel<TService>,
+    channel: GrpcChannel<TService>,
 }
 
 impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     RequestBuilder<TService, TRequest>
 {
-    pub fn new(input_contract: TRequest, channel: RentedChannel<TService>) -> Self {
+    pub fn new(input_contract: TRequest, channel: GrpcChannel<TService>) -> Self {
         Self {
             input_contract,
             channel,
@@ -59,6 +59,6 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
             .execute_with_response_as_stream(self.input_contract.clone(), grpc_executor)
             .await?;
 
-        return Ok(StreamedResponse::new(result, self.channel.timeout));
+        return Ok(StreamedResponse::new(result, self.channel.request_timeout));
     }
 }
