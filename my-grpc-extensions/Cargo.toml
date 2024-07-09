@@ -1,6 +1,6 @@
 [package]
 name = "my-grpc-extensions"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -27,8 +27,8 @@ rust-extensions = { tag = "0.1.4", git = "https://github.com/MyJetTools/rust-ext
 
 my-tls = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-tls.git", optional = true }
 tokio = { version = "*", features = ["full"] }
-tonic = { version = "0.11", features = ["tls", "tls-roots", "prost"] }
-hyper = { version = "0" }
+tonic = { version = "*", features = ["tls", "tls-roots", "prost"] }
+hyper = { version = "*" }
 futures-util = "*"
 tokio-stream = "*"
 futures = "*"
