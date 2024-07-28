@@ -16,7 +16,6 @@ pub struct ChannelData {
 }
 
 pub struct GrpcChannelHolder {
-    //todo!("Temporary there is no pool. Debugging retry/reconnect features - and then pool would be added.")
     pub channel: Mutex<Option<ChannelData>>,
 }
 
@@ -112,7 +111,19 @@ impl GrpcChannelHolder {
             let feature = Self::create_unix_socket_channel(connect_url.clone(), service_name);
 
             match tokio::time::timeout(request_timeout, feature).await {
-                Ok(result) => return result,
+                Ok(result) => match result {
+                    Ok(channel) => {
+                        {
+                            self.set(service_name, connect_url, channel.clone()).await;
+                        }
+                        return Ok(channel);
+                    }
+                    Err(err) => {
+                        if attempt_no > 3 {
+                            return Err(err.into());
+                        }
+                    }
+                },
                 Err(_) => {
                     if attempt_no > 3 {
                         return Err(GrpcReadError::Timeout);
