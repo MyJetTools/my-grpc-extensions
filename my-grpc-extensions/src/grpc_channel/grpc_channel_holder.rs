@@ -67,12 +67,75 @@ impl GrpcChannelHolder {
         }
     }
 
+    #[cfg(feature = "with-unix_socket")]
+    async fn create_unix_socket_channel(
+        unix_socket_path: String,
+        service_name: &'static str,
+    ) -> Result<Channel, GrpcReadError> {
+        use hyper::Uri;
+
+        let uri = Uri::builder()
+            .scheme("http")
+            .authority("unix.socket")
+            .path_and_query(unix_socket_path.as_str())
+            .build();
+
+        if uri.is_err() {
+            panic!(
+                "Failed to create unix socket uri with path:{} for service {}",
+                unix_socket_path, service_name
+            );
+        }
+
+        let channel = Channel::builder(uri.unwrap())
+            .connect_with_connector(tower::service_fn(|uri: Uri| async move {
+                let unix_socket_path = uri.path_and_query().unwrap().as_str();
+                let unix_stream = tokio::net::UnixStream::connect(unix_socket_path).await?;
+                // Connect to a Uds socket
+                Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(unix_stream))
+            }))
+            .await?;
+
+        Ok(channel)
+    }
+
+    #[cfg(feature = "with-unix-socket")]
+    async fn connect_to_unix_socket(
+        &self,
+        connect_url: String,
+        service_name: &'static str,
+        request_timeout: Duration,
+    ) -> Result<Channel, GrpcReadError> {
+        let mut attempt_no = 0;
+        loop {
+            let feature = Self::create_unix_socket_channel(connect_url.clone(), service_name);
+
+            match tokio::time::timeout(request_timeout, feature).await {
+                Ok(result) => return result,
+                Err(_) => {
+                    if attempt_no > 3 {
+                        return Err(GrpcReadError::Timeout);
+                    }
+                }
+            }
+
+            attempt_no += 1;
+        }
+    }
+
     pub async fn create_channel(
         &self,
         connect_url: String,
         service_name: &'static str,
         request_timeout: Duration,
     ) -> Result<Channel, GrpcReadError> {
+        #[cfg(feature = "with-unix-socket")]
+        if connect_url.starts_with("/") || connect_url.starts_with("~/") {
+            return self
+                .connect_to_unix_socket(connect_url, service_name, request_timeout)
+                .await;
+        }
+
         let mut attempt_no = 0;
         loop {
             let end_point = Channel::from_shared(connect_url.clone());
@@ -122,5 +185,23 @@ impl GrpcChannelHolder {
 
             attempt_no += 1;
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    #[test]
+    fn test_unix_socket_pass_to_uri() {
+        use hyper::Uri;
+
+        let uri = Uri::builder()
+            .scheme("http")
+            .path_and_query("/tmp/test.sock")
+            .authority("unix.socket")
+            .build()
+            .unwrap();
+
+        assert_eq!("/tmp/test.sock", uri.path_and_query().unwrap().as_str());
     }
 }

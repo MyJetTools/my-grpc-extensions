@@ -12,6 +12,7 @@ with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
 with-tls = ["my-tls"]
+with-unix-socket = []
 
 
 [dependencies]
@@ -34,10 +35,12 @@ tonic = { version = "*", features = [
     "tls-webpki-roots",
 ] }
 hyper = { version = "*" }
+hyper-util = { version = "*", features = ["tokio"] }
 futures-util = "*"
 tokio-stream = "*"
 futures = "*"
 async-trait = "*"
+tower = "*"
 my-grpc-client-macros = { optional = true, path = "../my-grpc-client-macros" }
 my-grpc-server-macros = { optional = true, path = "../my-grpc-server-macros" }
 external-dependencies = { path = "../external-dependencies" }
