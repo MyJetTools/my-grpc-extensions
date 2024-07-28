@@ -90,6 +90,7 @@ impl GrpcChannelHolder {
         let channel = Channel::builder(uri.unwrap())
             .connect_with_connector(tower::service_fn(|uri: Uri| async move {
                 let unix_socket_path = uri.path_and_query().unwrap().as_str();
+                println!("Grpc Client connecting to {}", unix_socket_path);
                 let unix_stream = tokio::net::UnixStream::connect(unix_socket_path).await?;
                 // Connect to a Uds socket
                 Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(unix_stream))

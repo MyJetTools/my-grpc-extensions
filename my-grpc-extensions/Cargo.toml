@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-default = []
+default = ["with-unix-socket", "grpc-client"]
 adjust-server-stream = []
 with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
