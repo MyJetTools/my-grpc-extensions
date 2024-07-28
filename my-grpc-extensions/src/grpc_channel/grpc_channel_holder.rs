@@ -67,7 +67,7 @@ impl GrpcChannelHolder {
         }
     }
 
-    #[cfg(feature = "with-unix_socket")]
+    #[cfg(feature = "with-unix-socket")]
     async fn create_unix_socket_channel(
         unix_socket_path: String,
         service_name: &'static str,
