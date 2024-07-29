@@ -48,21 +48,22 @@ my-grpc-extensions = { tag = "{max_version}", git = "https://github.com/MyJetToo
 
 
     //part of my_ssh library
-    let ssh_credentials = SshCredentials::SshAgent{
+    let ssh_credentials = my_grpc_extensions::my_ssh::SshCredentials::SshAgent{
         ssh_remote_host: "10.0.0.2".to_string(),
         ssh_remote_port: 22,
         ssh_user_name: "user".to_string(),
     };
 
+  //part of my_ssh library. 
     let ssh_sessions_pool:Arc<_> = Arc::new(SshSessionsPool::new()).into();
 
 
     grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
 
+    // If we plug the pool - connection is not going to be closed after each request;
     grpc_client
             .set_ssh_sessions_pool(ssh_sessions_pool.clone())
             .await;
-
 
 ```
 
