@@ -25,3 +25,5 @@ pub extern crate tonic;
 mod ssh;
 #[cfg(feature = "with-ssh")]
 pub use ssh::*;
+#[cfg(feature = "with-ssh")]
+pub extern crate my_ssh;
