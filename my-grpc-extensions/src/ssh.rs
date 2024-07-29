@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{env, sync::Arc};
 
 use my_ssh::*;
 use tokio::sync::Mutex;
@@ -65,8 +65,15 @@ pub fn generate_unix_socket_file(
         Some(port) => port.to_string(),
         None => "".to_string(),
     };
+
+    let root_path = match env::var("HOME") {
+        Ok(value) => value,
+        Err(_) => "/tmp".to_string(),
+    };
+
     format!(
-        "~/{}@{}_{}--{}_{}.sock",
+        "{}/grpc-{}-{}_{}--{}_{}.sock",
+        root_path,
         ssh_credentials.get_user_name(),
         ssh_host,
         ssh_port,

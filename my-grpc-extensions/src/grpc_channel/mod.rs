@@ -1,6 +1,8 @@
 mod grpc_channel;
 mod grpc_channel_holder;
 mod grpc_channel_pool;
+#[cfg(feature = "with-ssh")]
+mod port_forwards_pool;
 mod request_builder;
 mod request_builder_with_input_stream;
 mod request_builder_with_input_stream_with_retires;
@@ -9,6 +11,8 @@ mod streamed_response;
 pub use grpc_channel::*;
 pub use grpc_channel_holder::*;
 pub use grpc_channel_pool::*;
+#[cfg(feature = "with-ssh")]
+pub use port_forwards_pool::*;
 pub use request_builder::*;
 pub use request_builder_with_input_stream::*;
 pub use request_builder_with_input_stream_with_retires::*;

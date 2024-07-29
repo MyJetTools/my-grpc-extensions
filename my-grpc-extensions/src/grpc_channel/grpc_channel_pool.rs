@@ -4,6 +4,7 @@ use my_logger::LogEventCtx;
 #[cfg(feature = "with-telemetry")]
 use my_telemetry::MyTelemetryContext;
 
+use rust_extensions::UnsafeValue;
 use tokio::time::error::Elapsed;
 use tonic::transport::Channel;
 
@@ -40,7 +41,8 @@ pub struct GrpcChannelPool<TService: Send + Sync + 'static> {
     get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
     #[cfg(feature = "with-ssh")]
-    ssh_target: crate::SshTarget,
+    pub ssh_target: crate::SshTarget,
+    enable_ping: Arc<UnsafeValue<bool>>,
 }
 
 impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
@@ -50,7 +52,6 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         request_timeout: Duration,
         ping_timeout: Duration,
         ping_interval: Duration,
-        #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
     ) -> Self {
         let result = Self {
             grpc_channel_holder: Arc::new(GrpcChannelHolder::new()),
@@ -60,7 +61,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             get_grpc_address,
             service_factory,
             #[cfg(feature = "with-ssh")]
-            ssh_target,
+            ssh_target: crate::SshTarget::new(),
+            enable_ping: Arc::new(UnsafeValue::new(false)),
         };
 
         result.ping_channel();
@@ -72,6 +74,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         &self,
         #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
     ) -> GrpcChannel<TService> {
+        self.enable_ping.set_value(true);
         return GrpcChannel::new(
             self.grpc_channel_holder.clone(),
             self.request_timeout,
@@ -96,8 +99,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         let ping_timeout = self.ping_timeout;
         #[cfg(feature = "with-ssh")]
         let ssh_target = self.ssh_target.clone();
+        let enable_ping = self.enable_ping.clone();
         tokio::spawn(async move {
             loop {
+                if !enable_ping.get_value() {
+                    tokio::time::sleep(ping_interval).await;
+                    continue;
+                }
                 let channel = match inner.reuse_existing_channel().await {
                     Some(channel) => Ok(channel),
                     None => {
