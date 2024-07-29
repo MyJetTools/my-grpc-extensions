@@ -41,7 +41,7 @@ my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/My
 
 ```
 
-
+#### main.rs
 ```rust
     let grpc_client = MyLoggerGrpcClient::new(Arc::new(GrpcLogSettings::new(
             over_ssh_connection.remote_resource_string,
