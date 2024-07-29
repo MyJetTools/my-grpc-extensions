@@ -53,7 +53,7 @@ my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/My
 
     //part of my_ssh library
     let ssh_credentials = my_grpc_extensions::my_ssh::SshCredentials::SshAgent{
-        ssh_remote_host: "10.0.0.2".to_string(),
+        ssh_remote_host: "ssh_host".to_string(),
         ssh_remote_port: 22,
         ssh_user_name: "user".to_string(),
     };
