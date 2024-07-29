@@ -33,7 +33,7 @@ And you can use it: https://github.com/MyJetTools/my-ssh
 
 #### Cargo.toml
 ```toml
-my-grpc-extensions = { tag = "{max_version}", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
+my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
     "grpc-client",
     "with-unix-socket",
     "with-ssh",
@@ -42,7 +42,6 @@ my-grpc-extensions = { tag = "{max_version}", git = "https://github.com/MyJetToo
 ```
 
 
-$$$
 ```rust
     let grpc_client = MyLoggerGrpcClient::new(Arc::new(GrpcLogSettings::new(
             over_ssh_connection.remote_resource_string,
