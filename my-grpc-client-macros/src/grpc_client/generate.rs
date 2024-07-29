@@ -14,6 +14,7 @@ pub fn generate(
     attr: TokenStream,
     input: TokenStream,
     with_telemetry: bool,
+    with_ssh: bool,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
 
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -104,6 +105,13 @@ pub fn generate(
         quote::quote!(#grpc_service_name_token<tonic::transport::Channel>)
     };
 
+
+    let ssh_field = if with_ssh{
+        quote::quote!(ssh_target: my_grpc_extensions::SshTarget,)
+    }else{
+        quote::quote!()
+    };
+
     Ok(quote::quote! {
 
         #(#use_name_spaces;)*
@@ -127,6 +135,7 @@ pub fn generate(
 
       pub struct #struct_name{
         channel: my_grpc_extensions::GrpcChannelPool<TGrpcService>,
+        #ssh_field
       }
 
       impl #struct_name{

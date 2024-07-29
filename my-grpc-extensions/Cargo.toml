@@ -13,6 +13,7 @@ grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
 with-tls = ["my-tls"]
 with-unix-socket = []
+with-ssh = ["my-ssh", "my-grpc-client-macros?/with-ssh"]
 
 
 [dependencies]
@@ -41,6 +42,7 @@ tokio-stream = "*"
 futures = "*"
 async-trait = "*"
 tower = "*"
+my-ssh = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-ssh.git", optional = true }
 my-grpc-client-macros = { optional = true, path = "../my-grpc-client-macros" }
 my-grpc-server-macros = { optional = true, path = "../my-grpc-server-macros" }
 external-dependencies = { path = "../external-dependencies" }

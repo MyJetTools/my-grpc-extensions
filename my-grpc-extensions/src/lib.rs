@@ -21,3 +21,7 @@ pub extern crate my_grpc_server_macros as server;
 
 pub extern crate hyper;
 pub extern crate tonic;
+#[cfg(feature = "with-ssh")]
+mod ssh;
+#[cfg(feature = "with-ssh")]
+pub use ssh::*;
