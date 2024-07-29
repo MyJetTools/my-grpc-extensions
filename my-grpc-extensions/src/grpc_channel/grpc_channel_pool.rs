@@ -39,6 +39,8 @@ pub struct GrpcChannelPool<TService: Send + Sync + 'static> {
     pub ping_interval: Duration,
     get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
+    #[cfg(feature = "with-ssh")]
+    ssh_target: crate::SshTarget,
 }
 
 impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
@@ -48,6 +50,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         request_timeout: Duration,
         ping_timeout: Duration,
         ping_interval: Duration,
+        #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
     ) -> Self {
         let result = Self {
             grpc_channel_holder: Arc::new(GrpcChannelHolder::new()),
@@ -56,6 +59,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             ping_interval,
             get_grpc_address,
             service_factory,
+            #[cfg(feature = "with-ssh")]
+            ssh_target,
         };
 
         result.ping_channel();
@@ -74,6 +79,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             self.get_grpc_address.clone(),
             #[cfg(feature = "with-telemetry")]
             ctx.clone(),
+            #[cfg(feature = "with-ssh")]
+            self.ssh_target.clone(),
         );
     }
 
@@ -87,6 +94,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         let request_timeout = self.request_timeout;
         let ping_interval = self.ping_interval;
         let ping_timeout = self.ping_timeout;
+        #[cfg(feature = "with-ssh")]
+        let ssh_target = self.ssh_target.clone();
         tokio::spawn(async move {
             loop {
                 let channel = match inner.reuse_existing_channel().await {
@@ -102,7 +111,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
                         );
 
                         inner
-                            .create_channel(connect_url, service_name, request_timeout)
+                            .create_channel(
+                                connect_url,
+                                service_name,
+                                request_timeout,
+                                #[cfg(feature = "with-ssh")]
+                                ssh_target.get_value().await,
+                            )
                             .await
                     }
                 };
@@ -150,7 +165,6 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
                         );
                     }
                 }
-
                 tokio::time::sleep(ping_interval).await;
             }
         });

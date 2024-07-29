@@ -79,7 +79,7 @@ pub fn generate(
         }
     }
     
-    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry);
+    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry, with_ssh);
 
 
     let fn_create_service = if with_telemetry{
@@ -108,6 +108,29 @@ pub fn generate(
 
     let ssh_field = if with_ssh{
         quote::quote!(ssh_target: my_grpc_extensions::SshTarget,)
+    }else{
+        quote::quote!()
+    };
+
+
+    let ssh_new_init = if with_ssh{
+        quote::quote!(ssh_target: my_grpc_extensions::SshTarget::new(),)
+    }else{
+        quote::quote!()
+    };
+
+    let ssh_impl = if with_ssh{
+        quote::quote!{
+            pub fn set_ssh_credentials(mut self, ssh_credentials: std::sync::Arc<my_ssh::SshCredentials>) -> Self {
+                self.ssh_target.credentials = Some(ssh_credentials);
+                self
+            }
+        
+            pub fn set_ssh_sessions_pool(mut self, ssh_credentials: std::sync::Arc<my_ssh::SshSessionsPool>) -> Self {
+                self.ssh_target.sessions_pool = Some(ssh_credentials);
+                self
+            }
+        }
     }else{
         quote::quote!()
     };
@@ -147,13 +170,17 @@ pub fn generate(
                     std::time::Duration::from_secs(#timeout_sec),
                     std::time::Duration::from_secs(#ping_timeout_sec),
                     std::time::Duration::from_secs(#ping_interval_sec),
+                    
                 ),
+                #ssh_new_init
             }
         }
 
         pub fn get_service_name() -> &'static str {
             #settings_service_name
         }
+
+        #ssh_impl
 
         #(#grpc_methods)*  
       }

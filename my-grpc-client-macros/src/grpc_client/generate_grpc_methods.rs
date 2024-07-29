@@ -7,6 +7,7 @@ pub fn generate_grpc_methods(
     retries_amount: usize,
     overrides: &HashMap<String, FnOverride>,
     width_telemetry: bool,
+    with_ssh: bool,
 ) -> Vec<proc_macro2::TokenStream> {
     let mut result = Vec::new();
 
@@ -44,9 +45,17 @@ pub fn generate_grpc_methods(
         };
 
         let get_channel = if width_telemetry {
-            quote::quote!(self.channel.get_channel(ctx))
+            if with_ssh {
+                quote::quote!(self.channel.get_channel(ctx, ssh_target))
+            } else {
+                quote::quote!(self.channel.get_channel(ctx))
+            }
         } else {
-            quote::quote!(self.channel.get_channel())
+            if with_ssh {
+                quote::quote!(self.channel.get_channel(ssh_target))
+            } else {
+                quote::quote!(self.channel.get_channel())
+            }
         };
 
         //let log_fn_name = format!("{}::{}", struct_name, fn_name.to_string());

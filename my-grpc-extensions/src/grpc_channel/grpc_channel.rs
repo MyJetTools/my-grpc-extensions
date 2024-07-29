@@ -16,6 +16,8 @@ pub struct GrpcChannel<TService: Send + Sync + 'static> {
     get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     #[cfg(feature = "with-telemetry")]
     ctx: MyTelemetryContext,
+    #[cfg(feature = "with-ssh")]
+    ssh_target: crate::SshTarget,
 }
 
 impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
@@ -25,6 +27,7 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
         get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
         #[cfg(feature = "with-telemetry")] ctx: MyTelemetryContext,
+        #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
     ) -> Self {
         Self {
             grpc_channel_holder,
@@ -33,6 +36,8 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
             get_grpc_address,
             #[cfg(feature = "with-telemetry")]
             ctx,
+            #[cfg(feature = "with-ssh")]
+            ssh_target,
         }
     }
 
@@ -51,7 +56,13 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         let service_name = self.service_factory.get_service_name();
 
         self.grpc_channel_holder
-            .create_channel(connect_url, service_name, self.request_timeout)
+            .create_channel(
+                connect_url,
+                service_name,
+                self.request_timeout,
+                #[cfg(feature = "with-ssh")]
+                self.ssh_target.get_value().await,
+            )
             .await
     }
 

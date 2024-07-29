@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use my_logger::LogEventCtx;
+use rust_extensions::url_utils::HostEndpoint;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
@@ -13,6 +14,37 @@ pub struct ChannelData {
     pub channel: Channel,
     pub host: String,
     pub service_name: &'static str,
+}
+
+impl ChannelData {
+    pub fn get_host_endpoint(&self) -> HostEndpoint {
+        let result = HostEndpoint::new(&self.host);
+
+        if result.is_none() {
+            panic!(
+                "Failed to parse host endpoint '{}' for grpc service '{}'",
+                self.host, self.service_name
+            );
+        }
+
+        let mut result = result.unwrap();
+
+        if result.port.is_none() {
+            match result.scheme {
+                Some("http") => {
+                    result.port = Some(80);
+                }
+                Some("https") => {
+                    result.port = Some(443);
+                }
+                _ => {
+                    result.port = Some(80);
+                }
+            }
+        }
+
+        result
+    }
 }
 
 pub struct GrpcChannelHolder {
@@ -140,11 +172,36 @@ impl GrpcChannelHolder {
         connect_url: String,
         service_name: &'static str,
         request_timeout: Duration,
+        #[cfg(feature = "with-ssh")] ssh_target: crate::ssh::SshTargetInner,
     ) -> Result<Channel, GrpcReadError> {
         #[cfg(feature = "with-unix-socket")]
         if connect_url.starts_with("/") || connect_url.starts_with("~/") {
             return self
                 .connect_to_unix_socket(connect_url, service_name, request_timeout)
+                .await;
+        }
+
+        #[cfg(feature = "with-ssh")]
+        if let Some(ssh_credentials) = &ssh_target.credentials {
+            let channel_access = self.channel.lock().await;
+            let channel_data = channel_access.as_ref().unwrap();
+            let grpc_service_endpoint = channel_data.get_host_endpoint();
+
+            let unix_socket_name =
+                crate::ssh::generate_unix_socket_file(ssh_credentials, grpc_service_endpoint);
+
+            let ssh_session = ssh_target.get_ssh_session().await;
+
+            ssh_session
+                .start_port_forward(
+                    unix_socket_name.clone(),
+                    grpc_service_endpoint.host.to_string(),
+                    grpc_service_endpoint.port.unwrap(),
+                )
+                .await;
+
+            return self
+                .connect_to_unix_socket(unix_socket_name, service_name, request_timeout)
                 .await;
         }
 
