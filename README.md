@@ -43,9 +43,12 @@ my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/My
 
 #### main.rs
 ```rust
-    let grpc_client = MyLoggerGrpcClient::new(Arc::new(GrpcLogSettings::new(
-            over_ssh_connection.remote_resource_string,
-        )));
+
+    // Here we specify settings behind SSH connection. For instance: http://10.0.0.1:5051 which means we connecting to 
+    // remote network 10.0.0.0/24 behind SSH connection.
+    let grpc_settings = GrpcLogSettings::new(over_ssh_connection.remote_resource_string);
+
+    let grpc_client = MyLoggerGrpcClient::new(Arc::new(grpc_settings));
 
 
     //part of my_ssh library
@@ -59,6 +62,7 @@ my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/My
     let ssh_sessions_pool:Arc<_> = Arc::new(SshSessionsPool::new()).into();
 
 
+   //Enabling SSH connection
     grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
 
     // If we plug the pool - connection is not going to be closed after each request;
