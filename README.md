@@ -31,7 +31,7 @@ Plugging to SSH leverages on the library:
 And you can use it: https://github.com/MyJetTools/my-ssh
 
 
-``toml
+```toml
 my-grpc-extensions = { tag = "{max_version}", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
     "grpc-client",
     "with-unix-socket",
