@@ -1,4 +1,4 @@
-use std::pin::Pin;
+use std::{pin::Pin, time::Duration};
 
 use tokio::sync::mpsc::Sender;
 
@@ -6,6 +6,7 @@ use crate::grpc_server::SendStream;
 
 pub struct GrpcServerStreamResult<TModel: Send + Sync + 'static> {
     tx: Sender<Result<TModel, tonic::Status>>,
+    timeout: std::time::Duration,
 }
 
 impl<TModel: Send + Sync + 'static> GrpcServerStreamResult<TModel> {
@@ -18,10 +19,24 @@ impl<TModel: Send + Sync + 'static> GrpcServerStreamResult<TModel> {
         > = Box::pin(output_stream);
 
         let result = tonic::Response::new(response);
-        (Self { tx }, result)
+        (
+            Self {
+                tx,
+                timeout: Duration::from_secs(3),
+            },
+            result,
+        )
     }
 
-    pub async fn send_item(&mut self, item: TModel) {
-        self.tx.send(Ok(item)).await.unwrap()
+    pub fn set_timeout(&mut self, timeout: std::time::Duration) {
+        self.timeout = timeout;
+    }
+
+    pub async fn send(&mut self, item: TModel) {
+        let future = self.tx.send(Ok(item));
+        tokio::time::timeout(self.timeout, future)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }
