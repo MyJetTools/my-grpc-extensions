@@ -4,6 +4,10 @@ use tokio::sync::mpsc::error::SendTimeoutError;
 #[cfg(not(feature = "adjust-server-stream"))]
 const DEFAULT_SEND_TIMEOUT: Duration = Duration::from_secs(30);
 
+pub type SendStream<TDest> = tonic::Response<
+    Pin<Box<dyn futures_util::Stream<Item = Result<TDest, tonic::Status>> + Send + Sync + 'static>>,
+>;
+
 pub async fn create_empty_stream<TDest>() -> Result<
     tonic::Response<
         Pin<
