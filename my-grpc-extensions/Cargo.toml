@@ -7,7 +7,7 @@ edition = "2021"
 
 [features]
 default = []
-adjust-server-stream = ["with-ssh", "with-unix-socket"]
+adjust-server-stream = []
 with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
