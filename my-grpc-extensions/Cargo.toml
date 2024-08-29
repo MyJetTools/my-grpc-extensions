@@ -12,7 +12,7 @@ with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
 with-tls = ["my-tls"]
-with-unix-socket = []
+with-unix-socket = ["tower/util"]
 with-ssh = ["my-ssh", "my-grpc-client-macros?/with-ssh"]
 
 
@@ -31,19 +31,14 @@ lazy_static = "*"
 
 my-tls = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-tls.git", optional = true }
 tokio = { version = "*", features = ["full"] }
-tonic = { version = "*", features = [
-    "tls",
-    "tls-roots",
-    "prost",
-    "tls-webpki-roots",
-] }
+tonic = { version = "*", features = ["tls", "tls-roots", "prost"] }
 hyper = { version = "*" }
 hyper-util = { version = "*", features = ["tokio"] }
 futures-util = "*"
 tokio-stream = "*"
 futures = "*"
 async-trait = "*"
-tower = "*"
+tower = { version = "*" }
 my-ssh = { tag = "0.1.1", git = "https://github.com/MyJetTools/my-ssh.git", optional = true }
 my-grpc-client-macros = { optional = true, path = "../my-grpc-client-macros" }
 my-grpc-server-macros = { optional = true, path = "../my-grpc-server-macros" }
