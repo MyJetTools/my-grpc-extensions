@@ -10,9 +10,9 @@ impl GrpcClientInterceptor {
         Self { ctx }
     }
 
-    pub fn to_string(&self) -> String {
+    pub fn to_string(&self) -> Option<String> {
         match &self.ctx {
-            MyTelemetryContext::Single(process_id) => process_id.to_string(),
+            MyTelemetryContext::Single(process_id) => Some(process_id.to_string()),
             MyTelemetryContext::Multiple(ids) => {
                 let mut result = String::new();
                 let mut index = 0;
@@ -26,8 +26,9 @@ impl GrpcClientInterceptor {
                     index += 1;
                 }
 
-                result
+                Some(result)
             }
+            MyTelemetryContext::Empty => None,
         }
     }
 }
@@ -37,9 +38,12 @@ impl Interceptor for GrpcClientInterceptor {
         &mut self,
         mut request: tonic::Request<()>,
     ) -> Result<tonic::Request<()>, tonic::Status> {
-        request
-            .metadata_mut()
-            .insert("process-id", self.to_string().parse().unwrap());
+        if let Some(process_id) = self.to_string() {
+            request
+                .metadata_mut()
+                .insert("process-id", process_id.parse().unwrap());
+        }
+
         Ok(request)
     }
 }
