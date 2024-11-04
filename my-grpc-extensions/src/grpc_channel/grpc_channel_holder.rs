@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use my_logger::LogEventCtx;
-use rust_extensions::url_utils::HostEndpoint;
+use rust_extensions::remote_endpoint::RemoteEndpoint;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
@@ -143,9 +143,9 @@ impl GrpcChannelHolder {
         request_timeout: Duration,
         #[cfg(feature = "with-ssh")] ssh_target: crate::ssh::SshTargetInner,
     ) -> Result<Channel, GrpcReadError> {
-        let grpc_service_endpoint = HostEndpoint::new(&connect_url);
+        let grpc_service_endpoint = RemoteEndpoint::try_parse(&connect_url);
 
-        if grpc_service_endpoint.is_none() {
+        if grpc_service_endpoint.is_err() {
             panic!(
                 "Failed to parse grpc service endpoint: {} for service {}",
                 connect_url, service_name
