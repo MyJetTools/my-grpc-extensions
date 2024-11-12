@@ -1,6 +1,7 @@
 use std::{env, sync::Arc};
 
 use my_ssh::*;
+use rust_extensions::remote_endpoint::RemoteEndpoint;
 use tokio::sync::Mutex;
 #[derive(Clone)]
 pub struct SshTargetInner {
@@ -56,12 +57,12 @@ impl SshTarget {
 
 pub fn generate_unix_socket_file(
     ssh_credentials: &SshCredentials,
-    remote_host: rust_extensions::url_utils::HostEndpoint,
+    remote_host: RemoteEndpoint,
 ) -> String {
     let (ssh_host, ssh_port) = ssh_credentials.get_host_port();
 
-    let r_host = remote_host.host;
-    let r_port = match remote_host.port {
+    let r_host = remote_host.get_host();
+    let r_port = match remote_host.get_port() {
         Some(port) => port.to_string(),
         None => "".to_string(),
     };
