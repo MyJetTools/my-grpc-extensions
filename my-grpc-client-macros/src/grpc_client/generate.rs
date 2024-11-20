@@ -43,9 +43,9 @@ pub fn generate(
 
     let overrides = FnOverride::new(&params_list)?;
 
-    let ping_timeout_sec:usize = params_list.get_named_param("ping_timeout_sec")?.try_into()?;
-    let ping_interval_sec:usize = params_list.get_named_param("ping_interval_sec")?.try_into()?;
-    let timeout_sec:usize = params_list.get_named_param("request_timeout_sec")?.try_into()?;
+    let ping_timeout_sec:u64 = params_list.get_named_param("ping_timeout_sec")?.try_into()?;
+    let ping_interval_sec:u64 = params_list.get_named_param("ping_interval_sec")?.try_into()?;
+    let timeout_sec:u64 = params_list.get_named_param("request_timeout_sec")?.try_into()?;
     let retries:usize = params_list.get_named_param("retries")?.try_into()?;
     
 
