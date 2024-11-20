@@ -11,3 +11,5 @@ pub use generate_interfaces_implementations::*;
 pub use param_type::*;
 mod generate;
 pub use generate::*;
+//mod attr_params;
+//pub use attr_params::*;

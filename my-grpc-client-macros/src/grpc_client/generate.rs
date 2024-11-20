@@ -3,7 +3,7 @@
 use std::str::FromStr;
 
 use proc_macro::TokenStream;
-use types_reader::ParamsList;
+use types_reader::TokensObject;
 
 
 use crate::grpc_client::{fn_override::FnOverride, proto_file_reader::into_snake_case};
@@ -23,39 +23,33 @@ pub fn generate(
 
 
 
-    let attr_input: proc_macro2::TokenStream = attr.into();
+    let attr: proc_macro2::TokenStream = attr.into();
 
     
-    let attributes = ParamsList::new(attr_input, ||None)?;
-
-    let timeout_sec = attributes.get_named_param("request_timeout_sec")?;
-    let timeout_sec = timeout_sec.unwrap_as_number_value()?.as_literal();
+    let params_list = TokensObject::new(attr.into())?;
 
 
-    let ping_timeout_sec = attributes.get_named_param("ping_timeout_sec")?;
-    let ping_timeout_sec = ping_timeout_sec.unwrap_as_number_value()?.as_literal();
+
+    let proto_file:String = params_list.get_named_param("proto_file")?.try_into()?;
 
 
-    let ping_interval_sec = attributes.get_named_param("ping_interval_sec")?;
-    let ping_interval_sec = ping_interval_sec.unwrap_as_number_value()?.as_literal();
-
-    let proto_file = attributes.get_named_param("proto_file")?;
-    let proto_file = proto_file.unwrap_as_string_value()?.as_str();
-    let proto_file = ProtoServiceDescription::read_proto_file(proto_file);
+    let proto_file = ProtoServiceDescription::read_proto_file(&proto_file);
 
     let grpc_service_name = &proto_file.service_name;
     let grpc_service_name_token = proto_file.get_service_name_as_token();
 
     let interfaces = super::generate_interfaces_implementations(struct_name, &proto_file);
 
-    let retries = attributes.get_named_param("retries")?;
-    let retries = retries.unwrap_as_number_value()?.as_usize();
 
+    let overrides = FnOverride::new(&params_list)?;
 
-    let overrides = FnOverride::new(&attributes)?;
+    let ping_timeout_sec:usize = params_list.get_named_param("ping_timeout_sec")?.try_into()?;
+    let ping_interval_sec:usize = params_list.get_named_param("ping_interval_sec")?.try_into()?;
+    let timeout_sec:usize = params_list.get_named_param("request_timeout_sec")?.try_into()?;
+    let retries:usize = params_list.get_named_param("retries")?.try_into()?;
+    
 
-
-    let crate_ns = attributes.get_named_param("crate_ns")?.unwrap_as_string_value()?.as_str();
+    let crate_ns:String = params_list.get_named_param("crate_ns")?.try_into()?;
     let mut use_name_spaces = Vec::new();
     use_name_spaces.push(proc_macro2::TokenStream::from_str(format!("use {}::*", crate_ns).as_str()).unwrap());
 
@@ -63,19 +57,16 @@ pub fn generate(
     use_name_spaces.push(proc_macro2::TokenStream::from_str(ns_of_client.as_str()).unwrap());
 
 
-    let settings_service_name = if let Some(service_name) =  attributes.try_get_named_param("service_name"){
-        service_name.unwrap_as_string_value()?.as_str().to_string()
-        
+    let settings_service_name = if let Some(service_name) =  params_list.try_get_named_param("service_name"){
+        service_name.unwrap_as_value()?.as_string()?.to_string()
     }else{
         struct_name.to_string()
     };
 
     for (override_fn_name, fn_override) in &overrides{
         if !proto_file.has_method(override_fn_name){
-            return Err(syn::Error::new_spanned(
-                fn_override.token_stream.clone(),
-                format!("Method {} is not found in proto file for service {}", override_fn_name, grpc_service_name),
-            ));
+            let message = format!("Method {} is not found in proto file for service {}", override_fn_name, grpc_service_name);
+            return Err(fn_override.token_stream.throw_error_at_value_token(message.as_str()));
         }
     }
     

@@ -1,46 +1,39 @@
 use std::collections::HashMap;
 
-use proc_macro2::TokenStream;
-use types_reader::ParamsList;
+use types_reader::TokensObject;
 
 pub struct FnOverride<'s> {
     pub retries: usize,
-    pub token_stream: &'s TokenStream,
+    pub token_stream: &'s TokensObject,
 }
 
 impl<'s> FnOverride<'s> {
-    pub fn new(attributes: &'s ParamsList) -> Result<HashMap<String, Self>, syn::Error> {
-        let overrides = attributes.try_get_named_param("overrides");
+    pub fn new(params: &'s TokensObject) -> Result<HashMap<String, Self>, syn::Error> {
+        let overrides = params.try_get_named_param("overrides");
 
         if overrides.is_none() {
             return Ok(HashMap::new());
         }
 
-        let tokens_list = overrides.unwrap();
-
-        let overrides = tokens_list.unwrap_as_object_list()?;
+        let overrides = overrides.unwrap().unwrap_as_vec()?;
 
         let mut result = HashMap::new();
 
         for item in overrides.iter() {
-            let name = item
-                .get_named_param("fn_name")?
-                .unwrap_as_string_value()?
-                .to_string();
+            let name: String = item.get_named_param("fn_name")?.try_into()?;
+
+            let retries: usize = item.get_named_param("retries")?.try_into()?;
             result.insert(
                 name,
                 FnOverride {
-                    retries: item
-                        .get_named_param("retries")?
-                        .unwrap_as_number_value()?
-                        .as_usize(),
-                    token_stream: item.get_token_stream(),
+                    retries,
+                    token_stream: item,
                 },
             );
         }
 
         if result.len() == 0 {
-            return Err(tokens_list.throw_error("Overrides list can not be empty. Just remove field if you do not want to override any function"));
+            return Err(params.throw_error_at_param_token("Overrides list can not be empty. Just remove field if you do not want to override any function"));
         }
 
         Ok(result)

@@ -1,19 +1,21 @@
+use types_reader::TokensObject;
+
 pub fn generate(
     attr: proc_macro::TokenStream,
     input: proc_macro::TokenStream,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
-    let params_list = types_reader::ParamsList::new(attr.into(), || None)?;
+    let tokens: proc_macro2::TokenStream = attr.into();
+    let params_list = TokensObject::new(tokens.into())?;
 
-    let item_name = params_list.get_from_single_or_named("item_name")?;
+    let item_name: &str = params_list
+        .get_value_from_single_or_named("item_name")?
+        .try_into()?;
 
     let content = input.to_string();
 
     let stream_name = find_stream_name(content.as_str());
 
-    let stream_implementation = crate::generate_stream::generate_stream(
-        stream_name,
-        item_name.unwrap_as_string_value()?.as_str(),
-    );
+    let stream_implementation = crate::generate_stream::generate_stream(stream_name, item_name);
 
     let input: proc_macro2::TokenStream = input.into();
 
@@ -63,7 +65,6 @@ fn find_stream_name(content: &str) -> &str {
 
     stream_name.unwrap()
 }
-
 
 #[cfg(test)]
 mod tests {
