@@ -135,7 +135,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
                         let service = service_factory.create_service(
                             channel,
                             #[cfg(feature = "with-telemetry")]
-                            &MyTelemetryContext::new(),
+                            &MyTelemetryContext::create_empty(),
                         );
 
                         let service_factory_cloned = service_factory.clone();

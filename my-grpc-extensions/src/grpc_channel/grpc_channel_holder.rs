@@ -152,7 +152,7 @@ impl GrpcChannelHolder {
             );
         }
 
-        let grpc_service_endpoint = grpc_service_endpoint.unwrap();
+        let _grpc_service_endpoint = grpc_service_endpoint.unwrap();
 
         #[cfg(feature = "with-unix-socket")]
         if connect_url.starts_with("/") || connect_url.starts_with("~/") {
@@ -172,7 +172,7 @@ impl GrpcChannelHolder {
                 .start_port_forward(
                     &ssh_session,
                     unix_socket_name.as_str(),
-                    grpc_service_endpoint,
+                    _grpc_service_endpoint,
                 )
                 .await;
 
