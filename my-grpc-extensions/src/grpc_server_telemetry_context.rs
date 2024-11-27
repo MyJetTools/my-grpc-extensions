@@ -100,7 +100,7 @@ pub fn get_telemetry(
         }
     }
 
-    return GrpcServerTelemetryContext::new(MyTelemetryContext::new(), addr, method.to_string());
+    return GrpcServerTelemetryContext::new(MyTelemetryContext::None, addr, method.to_string());
 }
 
 fn has_multiple_ids(src: &[u8]) -> bool {
