@@ -52,6 +52,15 @@ impl GrpcConnectUrl {
         }
     }
 
+    #[cfg(feature = "with-ssh")]
+    pub fn is_over_ssh(&self) -> bool {
+        match self {
+            Self::Tcp { over_ssh, .. } => over_ssh.ssh_credentials.is_some(),
+            #[cfg(feature = "with-unix-socket")]
+            Self::UnixSocket(_) => false,
+        }
+    }
+
     pub fn as_str(&self) -> &str {
         match self {
             Self::Tcp { raw, .. } => raw,

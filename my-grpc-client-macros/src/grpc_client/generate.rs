@@ -48,7 +48,6 @@ pub fn generate(
     let timeout_sec:u64 = params_list.get_named_param("request_timeout_sec")?.try_into()?;
     let retries:usize = params_list.get_named_param("retries")?.try_into()?;
     
-
     let crate_ns:String = params_list.get_named_param("crate_ns")?.try_into()?;
     let mut use_name_spaces = Vec::new();
     use_name_spaces.push(proc_macro2::TokenStream::from_str(format!("use {}::*", crate_ns).as_str()).unwrap());
@@ -99,14 +98,13 @@ pub fn generate(
 
     let (ssh_impl, ssh_trait) = if with_ssh{
         let ssh_impl = quote::quote!{
-            pub async fn set_ssh_private_key(
+            pub async fn set_ssh_private_key_resolver(
                 &self,
-                private_key: String,
-                pass_phrase: Option<String>
+                resolver: Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>
             ) {
                 self.channel
                     .ssh_target
-                    .set_private_key(private_key, pass_phrase)
+                    .set_ssh_private_key_resolver(resolver)
                     .await;
             }
         };
@@ -114,10 +112,10 @@ pub fn generate(
         let ssh_trait = quote::quote!{
             #[async_trait::async_trait]
             impl my_grpc_extensions::GrpcClientSsh for #struct_name {
-                async fn set_ssh_private_key(&self, private_key: String, pass_phrase: Option<String>){
+                async fn set_ssh_private_key_resolver(&self, resolver: Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>){
                     self.channel
                     .ssh_target
-                    .set_private_key(private_key, pass_phrase)
+                    .set_ssh_private_key_resolver(resolver)
                     .await;
                 }
             }

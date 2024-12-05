@@ -6,31 +6,35 @@ use tokio::sync::Mutex;
 
 use crate::GrpcConnectUrl;
 
-#[async_trait::async_trait]
-pub trait GrpcClientSsh {
-    async fn set_ssh_private_key(&self, private_key: String, pass_phrase: Option<String>);
-}
-
 #[derive(Clone)]
 pub struct SshTargetInner {
-    pub private_key: Option<(String, Option<String>)>,
+    pub private_key_resolver:
+        Option<Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>>,
 }
 
 impl SshTargetInner {
-    pub fn get_ssh_session(&self, ssh_credentials: &SshCredentials) -> Arc<SshSession> {
-        let ssh_credentials = if let Some((private_key, pass_phrase)) = self.private_key.as_ref() {
-            let host_port = ssh_credentials.get_host_port();
-            SshCredentials::PrivateKey {
-                ssh_remote_host: host_port.0.to_string(),
-                ssh_remote_port: host_port.1,
-                ssh_user_name: ssh_credentials.get_user_name().to_string(),
-                private_key: private_key.to_string(),
-                passphrase: pass_phrase.clone(),
+    async fn get_ssh_credentials(&self, ssh_credentials: &SshCredentials) -> SshCredentials {
+        if let Some(private_key_resolver) = self.private_key_resolver.as_ref() {
+            let ssh_line = ssh_credentials.to_string();
+            if let Some(private_key) = private_key_resolver
+                .resolve_ssh_private_key(&ssh_line)
+                .await
+            {
+                let host_port = ssh_credentials.get_host_port();
+                return SshCredentials::PrivateKey {
+                    ssh_remote_host: host_port.0.to_string(),
+                    ssh_remote_port: host_port.1,
+                    ssh_user_name: ssh_credentials.get_user_name().to_string(),
+                    private_key: private_key.content,
+                    passphrase: private_key.pass_phrase.clone(),
+                };
             }
-        } else {
-            ssh_credentials.clone()
-        };
+        }
+        ssh_credentials.clone()
+    }
 
+    pub async fn get_ssh_session(&self, ssh_credentials: &SshCredentials) -> Arc<SshSession> {
+        let ssh_credentials = self.get_ssh_credentials(ssh_credentials).await;
         let ssh_session = my_ssh::SshSession::new(Arc::new(ssh_credentials));
         std::sync::Arc::new(ssh_session)
     }
@@ -44,12 +48,17 @@ pub struct SshTarget {
 impl SshTarget {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(SshTargetInner { private_key: None })),
+            inner: Arc::new(Mutex::new(SshTargetInner {
+                private_key_resolver: None,
+            })),
         }
     }
-    pub async fn set_private_key(&self, private_key: String, passphrase: Option<String>) {
+    pub async fn set_ssh_private_key_resolver(
+        &self,
+        resolver: Arc<dyn SshPrivateKeyResolver + Send + Sync + 'static>,
+    ) {
         let mut inner = self.inner.lock().await;
-        inner.private_key = Some((private_key, passphrase));
+        inner.private_key_resolver = Some(resolver);
     }
 
     pub async fn get_value(&self) -> SshTargetInner {

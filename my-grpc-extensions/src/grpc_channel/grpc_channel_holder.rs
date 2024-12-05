@@ -175,7 +175,7 @@ impl GrpcChannelHolder {
             let unix_socket_name =
                 crate::ssh::generate_unix_socket_file(ssh_credentials, grpc_service_endpoint);
 
-            let ssh_session = ssh_target.get_ssh_session(ssh_credentials);
+            let ssh_session = ssh_target.get_ssh_session(ssh_credentials).await;
 
             super::PORT_FORWARDS_POOL
                 .start_port_forward(
