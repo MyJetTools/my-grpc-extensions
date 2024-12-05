@@ -113,7 +113,7 @@ pub fn generate(
 
         let ssh_trait = quote::quote!{
             #[async_trait::async_trait]
-            impl my_ssh::GrpcClientSsh for #struct_name {
+            impl my_grpc_extensions::GrpcClientSsh for #struct_name {
                 async fn set_ssh_private_key(&self, private_key: String, pass_phrase: Option<String>){
                     self.channel
                     .ssh_target
