@@ -26,7 +26,7 @@ impl PortForwardsPool {
         grpc_service_endpoint: RemoteEndpoint<'_>,
     ) {
         println!(
-            "Starting port forward for unix_socket_name: {}->{}->{}",
+            "Starting port forward for unix_socket_name:[{}]->[{}]->[{}]",
             unix_socket_name,
             ssh_session.get_ssh_credentials().to_string(),
             grpc_service_endpoint.get_host_port(None)
