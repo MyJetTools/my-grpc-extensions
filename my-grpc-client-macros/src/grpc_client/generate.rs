@@ -100,11 +100,11 @@ pub fn generate(
         let ssh_impl = quote::quote!{
             pub async fn set_ssh_private_key_resolver(
                 &self,
-                resolver: std::sync::Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>
+                resolver: std::sync::Arc<dyn my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>
             ) {
                 self.channel
                     .ssh_target
-                    .set_ssh_private_key_resolver(resolver)
+                    .set_ssh_security_credentials_resolver(resolver)
                     .await;
             }
         };
