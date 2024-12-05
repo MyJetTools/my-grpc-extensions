@@ -6,6 +6,13 @@ use tokio::sync::Mutex;
 
 use crate::GrpcConnectUrl;
 
+pub trait GrpcClientSsh {
+    async fn set_ssh_private_key_resolver(
+        &self,
+        resolver: Arc<dyn SshPrivateKeyResolver + Send + Sync + 'static>,
+    );
+}
+
 #[derive(Clone)]
 pub struct SshTargetInner {
     pub private_key_resolver:
