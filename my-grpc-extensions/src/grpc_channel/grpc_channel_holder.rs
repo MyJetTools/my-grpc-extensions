@@ -164,7 +164,7 @@ impl GrpcChannelHolder {
         #[cfg(feature = "with-ssh")]
         if let Some(ssh_credentials) = &ssh_target.credentials {
             let unix_socket_name =
-                crate::ssh::generate_unix_socket_file(ssh_credentials, grpc_service_endpoint);
+                crate::ssh::generate_unix_socket_file(ssh_credentials, _grpc_service_endpoint);
 
             let ssh_session = ssh_target.get_ssh_session().await;
 
