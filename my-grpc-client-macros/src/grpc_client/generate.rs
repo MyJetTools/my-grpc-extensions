@@ -100,7 +100,7 @@ pub fn generate(
         let ssh_impl = quote::quote!{
             pub async fn set_ssh_private_key_resolver(
                 &self,
-                resolver: Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>
+                resolver: std::sync::Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>
             ) {
                 self.channel
                     .ssh_target
@@ -112,7 +112,7 @@ pub fn generate(
         let ssh_trait = quote::quote!{
             #[async_trait::async_trait]
             impl my_grpc_extensions::GrpcClientSsh for #struct_name {
-                async fn set_ssh_private_key_resolver(&self, resolver: Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>){
+                async fn set_ssh_private_key_resolver(&self, resolver: std::sync::Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>){
                     self.channel
                     .ssh_target
                     .set_ssh_private_key_resolver(resolver)
