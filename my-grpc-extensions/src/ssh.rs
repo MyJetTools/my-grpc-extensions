@@ -3,10 +3,15 @@ use std::{env, sync::Arc};
 use my_ssh::*;
 use rust_extensions::remote_endpoint::RemoteEndpoint;
 use tokio::sync::Mutex;
+
+#[async_trait::async_trait]
+pub trait GrpcClientSsh {
+    async fn set_ssh_private_key(&mut self, private_key: String, pass_phrase: Option<String>);
+}
+
 #[derive(Clone)]
 pub struct SshTargetInner {
     pub credentials: Option<Arc<SshCredentials>>,
-    pub sessions_pool: Option<Arc<SshSessionsPool>>,
 }
 
 impl SshTargetInner {
@@ -17,9 +22,6 @@ impl SshTargetInner {
 
         let ssh_credentials = self.credentials.as_ref().unwrap();
 
-        if let Some(pool) = self.sessions_pool.as_ref() {
-            return pool.get_or_create(ssh_credentials).await;
-        }
         let ssh_session = my_ssh::SshSession::new(ssh_credentials.clone());
         std::sync::Arc::new(ssh_session)
     }
@@ -33,21 +35,19 @@ pub struct SshTarget {
 impl SshTarget {
     pub fn new() -> Self {
         Self {
-            inner: Arc::new(Mutex::new(SshTargetInner {
-                credentials: None,
-                sessions_pool: None,
-            })),
+            inner: Arc::new(Mutex::new(SshTargetInner { credentials: None })),
         }
     }
-
-    pub async fn set_credentials(&self, value: Arc<SshCredentials>) {
+    pub async fn set_private_key(&self, private_key: String, passphrase: Option<String>) {
         let mut inner = self.inner.lock().await;
-        inner.credentials = Some(value);
-    }
-
-    pub async fn set_sessions_pool(&self, value: Arc<SshSessionsPool>) {
-        let mut inner = self.inner.lock().await;
-        inner.sessions_pool = Some(value);
+        if let Some(ssh_credentials) = &inner.credentials {
+            inner.credentials = Some(
+                ssh_credentials
+                    .as_ref()
+                    .into_with_private_key(private_key, passphrase)
+                    .into(),
+            );
+        }
     }
 
     pub async fn get_value(&self) -> SshTargetInner {

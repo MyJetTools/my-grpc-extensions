@@ -97,29 +97,36 @@ pub fn generate(
     };
 
 
-    let ssh_impl = if with_ssh{
-        quote::quote!{
-            pub async fn set_ssh_credentials(
+    let (ssh_impl, ssh_trait) = if with_ssh{
+        let ssh_impl = quote::quote!{
+            pub async fn set_ssh_private_key(
                 &self,
-                ssh_credentials: std::sync::Arc<my_ssh::SshCredentials>,
+                private_key: String,
+                pass_phrase: Option<String>
             ) {
                 self.channel
                     .ssh_target
-                    .set_credentials(ssh_credentials)
+                    .set_private_key(private_key, pass_phrase)
                     .await;
             }
-            pub async fn set_ssh_sessions_pool(
-                &self,
-                session_pool: std::sync::Arc<my_ssh::SshSessionsPool>,
-            ) {
-                self.channel
+        };
+
+        let ssh_trait = quote::quote!{
+            #[async_trait::async_trait]
+            impl my_ssh::GrpcClientSsh for #struct_name {
+                async fn set_ssh_private_key(&self, private_key: String, pass_phrase: Option<String>){
+                    self.channel
                     .ssh_target
-                    .set_sessions_pool(session_pool)
+                    .set_private_key(private_key, pass_phrase)
                     .await;
+                }
             }
-        }
+        };
+
+
+        (ssh_impl, ssh_trait)
     }else{
-        quote::quote!()
+        (quote::quote!(), quote::quote!())
     };
 
     Ok(quote::quote! {
@@ -171,6 +178,8 @@ pub fn generate(
       }
 
       #(#interfaces)*  
+
+      #ssh_trait
     }
     .into())
 }
