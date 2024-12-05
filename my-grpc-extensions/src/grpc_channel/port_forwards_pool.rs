@@ -25,6 +25,12 @@ impl PortForwardsPool {
         unix_socket_name: &str,
         grpc_service_endpoint: RemoteEndpoint<'_>,
     ) {
+        println!(
+            "Starting port forward for unix_socket_name: {}->{}->{}",
+            unix_socket_name,
+            ssh_session.get_ssh_credentials().to_string(),
+            grpc_service_endpoint.get_host_port(None)
+        );
         let write_access = self.port_forwards.lock().await;
         if write_access.contains_key(unix_socket_name) {
             return;
