@@ -2,7 +2,7 @@ pub enum GrpcConnectUrl {
     Tcp {
         raw: String,
         #[cfg(feature = "with-ssh")]
-        over_ssh: my_ssh::OverSshConnectionSettings,
+        over_ssh: my_ssh::ssh_settings::OverSshConnectionSettings,
     },
     #[cfg(feature = "with-unix-socket")]
     UnixSocket(String),
@@ -11,7 +11,7 @@ impl GrpcConnectUrl {
     fn new_as_tcp(raw: String) -> Self {
         Self::Tcp {
             #[cfg(feature = "with-ssh")]
-            over_ssh: my_ssh::OverSshConnectionSettings::parse(raw.as_str()),
+            over_ssh: my_ssh::ssh_settings::OverSshConnectionSettings::parse(raw.as_str()),
             raw,
         }
     }
@@ -19,7 +19,7 @@ impl GrpcConnectUrl {
     fn new_as_unix_socket(raw: String) -> Self {
         Self::Tcp {
             #[cfg(feature = "with-ssh")]
-            over_ssh: my_ssh::OverSshConnectionSettings::parse(raw.as_str()),
+            over_ssh: my_ssh::ssh_settings::OverSshConnectionSettings::parse(raw.as_str()),
             raw,
         }
     }

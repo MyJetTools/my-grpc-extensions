@@ -8,16 +8,19 @@ use crate::GrpcConnectUrl;
 
 #[async_trait::async_trait]
 pub trait GrpcClientSsh {
-    async fn set_ssh_private_key_resolver(
+    async fn set_ssh_security_credentials_resolver(
         &self,
-        resolver: Arc<dyn SshPrivateKeyResolver + Send + Sync + 'static>,
+        resolver: Arc<
+            dyn my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static,
+        >,
     );
 }
 
 #[derive(Clone)]
 pub struct SshTargetInner {
-    pub private_key_resolver:
-        Option<Arc<dyn my_ssh::SshPrivateKeyResolver + Send + Sync + 'static>>,
+    pub private_key_resolver: Option<
+        Arc<dyn my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>,
+    >,
 }
 
 impl SshTargetInner {
@@ -61,9 +64,9 @@ impl SshTarget {
             })),
         }
     }
-    pub async fn set_ssh_private_key_resolver(
+    pub async fn set_ssh_security_credentials_resolver(
         &self,
-        resolver: Arc<dyn SshPrivateKeyResolver + Send + Sync + 'static>,
+        resolver: Arc<dyn ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>,
     ) {
         let mut inner = self.inner.lock().await;
         inner.private_key_resolver = Some(resolver);
