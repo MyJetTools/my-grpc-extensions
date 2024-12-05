@@ -124,7 +124,7 @@ pub fn generate(
         };
 
 
-        (ssh_impl, ssh_trait)
+        (ssh_impl, quote::quote!())
     }else{
         (quote::quote!(), quote::quote!())
     };
