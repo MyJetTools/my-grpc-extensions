@@ -88,95 +88,129 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
     }
 
     fn ping_channel(&self) {
-        let get_grpc_address = self.get_grpc_address.clone();
-        let service_name = self.service_factory.get_service_name();
-        let service_factory = self.service_factory.clone();
-
-        let inner = self.grpc_channel_holder.clone();
-
-        let request_timeout = self.request_timeout;
-        let ping_interval = self.ping_interval;
-        let ping_timeout = self.ping_timeout;
         #[cfg(feature = "with-ssh")]
         let ssh_target = self.ssh_target.clone();
         let enable_ping = self.enable_ping.clone();
-        tokio::spawn(async move {
-            loop {
-                if !enable_ping.get_value() {
-                    tokio::time::sleep(ping_interval).await;
-                    continue;
-                }
-                let channel = match inner.reuse_existing_channel().await {
-                    Some(channel) => Ok(channel),
-                    None => {
-                        let connect_url = get_grpc_address.get_grpc_url(service_name).await;
-                        my_logger::LOGGER.write_warning(
-                            "GrpcChannel::ping_channel",
-                            "Channel is not available. Creating One",
-                            LogEventCtx::new()
-                                .add("GrpcClient", service_name)
-                                .add("Host", connect_url.to_string()),
-                        );
+        let ping_interval = self.ping_interval;
+        let grpc_channel_holder = self.grpc_channel_holder.clone();
+        let grpc_client_settings = self.get_grpc_address.clone();
+        let grpc_service_factory = self.service_factory.clone();
+        let request_timeout = self.request_timeout;
+        tokio::spawn(ping_loop(
+            #[cfg(feature = "with-ssh")]
+            ssh_target,
+            enable_ping,
+            ping_interval,
+            request_timeout,
+            grpc_channel_holder,
+            grpc_client_settings,
+            grpc_service_factory,
+        ));
+    }
+}
 
-                        inner
-                            .create_channel(
-                                connect_url,
-                                service_name,
-                                request_timeout,
-                                #[cfg(feature = "with-ssh")]
-                                ssh_target.get_value().await,
-                            )
-                            .await
+async fn ping_loop<TService: Send + Sync + 'static>(
+    #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
+    enable_ping: Arc<UnsafeValue<bool>>,
+    ping_interval: Duration,
+    request_timeout: Duration,
+    grpc_channel_holder: Arc<GrpcChannelHolder>,
+    grpc_client_settings: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
+    grpc_service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
+) {
+    loop {
+        if !enable_ping.get_value() {
+            tokio::time::sleep(ping_interval).await;
+            continue;
+        }
+        let channel = match grpc_channel_holder.reuse_existing_channel().await {
+            Some(channel) => Ok(channel),
+            None => {
+                let connect_url = grpc_client_settings
+                    .get_grpc_url(grpc_service_factory.get_service_name())
+                    .await;
+                my_logger::LOGGER.write_warning(
+                    "GrpcChannel::ping_channel",
+                    "Channel is not available. Creating One",
+                    LogEventCtx::new()
+                        .add("GrpcClient", grpc_service_factory.get_service_name())
+                        .add("Host", connect_url.to_string()),
+                );
+
+                grpc_channel_holder
+                    .create_channel(
+                        connect_url,
+                        grpc_service_factory.get_service_name(),
+                        request_timeout,
+                        #[cfg(feature = "with-ssh")]
+                        ssh_target.get_value().await,
+                    )
+                    .await
+            }
+        };
+
+        match channel {
+            Ok(channel) => {
+                let service = grpc_service_factory.create_service(
+                    channel,
+                    #[cfg(feature = "with-telemetry")]
+                    &MyTelemetryContext::create_empty(),
+                );
+
+                let result = tokio::spawn(execute_ping_with_timeout(
+                    grpc_service_factory.clone(),
+                    request_timeout,
+                    service,
+                ))
+                .await;
+
+                match result {
+                    Ok(result) => match result {
+                        PingResult::Ok => {}
+                        PingResult::Timeout => {
+                            grpc_channel_holder
+                                .drop_channel("Ping Timeout".to_string())
+                                .await;
+                        }
+                    },
+                    Err(_) => {
+                        grpc_channel_holder
+                            .drop_channel("Ping Panic".to_string())
+                            .await;
                     }
                 };
-
-                match channel {
-                    Ok(channel) => {
-                        let service = service_factory.create_service(
-                            channel,
-                            #[cfg(feature = "with-telemetry")]
-                            &MyTelemetryContext::create_empty(),
-                        );
-
-                        let service_factory_cloned = service_factory.clone();
-
-                        let result = tokio::spawn(async move {
-                            let future = service_factory_cloned.ping(service);
-
-                            if tokio::time::timeout(ping_timeout, future).await.is_err() {
-                                return PingResult::Timeout;
-                            }
-
-                            PingResult::Ok
-                        })
-                        .await;
-
-                        match result {
-                            Ok(result) => match result {
-                                PingResult::Ok => {}
-                                PingResult::Timeout => {
-                                    inner.drop_channel("Ping Timeout".to_string()).await;
-                                }
-                            },
-                            Err(_) => {
-                                inner.drop_channel("Ping Panic".to_string()).await;
-                            }
-                        };
-                    }
-                    Err(err) => {
-                        my_logger::LOGGER.write_error(
-                            "GrpcChannel::ping_channel",
-                            format!("{:?}", err),
-                            LogEventCtx::new()
-                                .add("GrpcClient", service_name)
-                                .add("Host", get_grpc_address.get_grpc_url(service_name).await),
-                        );
-                    }
-                }
-                tokio::time::sleep(ping_interval).await;
             }
-        });
+            Err(err) => {
+                my_logger::LOGGER.write_error(
+                    "GrpcChannel::ping_channel",
+                    format!("{:?}", err),
+                    LogEventCtx::new()
+                        .add("GrpcClient", grpc_service_factory.get_service_name())
+                        .add(
+                            "Host",
+                            grpc_client_settings
+                                .get_grpc_url(grpc_service_factory.get_service_name())
+                                .await,
+                        ),
+                );
+            }
+        }
+        tokio::time::sleep(ping_interval).await;
     }
+}
+
+async fn execute_ping_with_timeout<TService: Send + Sync + 'static>(
+    service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
+    ping_timeout: Duration,
+    service: TService,
+) -> PingResult {
+    let future = service_factory.ping(service);
+
+    if tokio::time::timeout(ping_timeout, future).await.is_err() {
+        return PingResult::Timeout;
+    }
+
+    PingResult::Ok
 }
 
 pub enum PingResult {

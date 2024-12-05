@@ -9,6 +9,8 @@ use crate::{
     RequestBuilderWithInputStream,
 };
 
+use super::GrpcConnectUrl;
+
 pub struct GrpcChannel<TService: Send + Sync + 'static> {
     grpc_channel_holder: Arc<GrpcChannelHolder>,
     pub request_timeout: Duration,
@@ -41,10 +43,13 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         }
     }
 
-    pub async fn get_connect_url(&self) -> String {
-        self.get_grpc_address
+    pub async fn get_connect_url(&self) -> GrpcConnectUrl {
+        let settings = self
+            .get_grpc_address
             .get_grpc_url(self.service_factory.get_service_name())
-            .await
+            .await;
+
+        return settings.into();
     }
 
     pub async fn get_channel(&self) -> Result<Channel, GrpcReadError> {

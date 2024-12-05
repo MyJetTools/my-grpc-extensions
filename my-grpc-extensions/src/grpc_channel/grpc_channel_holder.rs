@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use my_logger::LogEventCtx;
-use rust_extensions::remote_endpoint::RemoteEndpoint;
 use tokio::sync::Mutex;
 use tonic::transport::Channel;
 
@@ -10,9 +9,11 @@ use crate::GrpcReadError;
 #[cfg(feature = "with-tls")]
 use tonic::transport::{Certificate, ClientTlsConfig};
 
+use super::GrpcConnectUrl;
+
 pub struct ChannelData {
     pub channel: Channel,
-    pub host: String,
+    pub host: GrpcConnectUrl,
     pub service_name: &'static str,
 }
 
@@ -27,13 +28,13 @@ impl GrpcChannelHolder {
         }
     }
 
-    async fn set(&self, service_name: &'static str, host: String, channel: Channel) {
+    async fn set(&self, service_name: &'static str, host: GrpcConnectUrl, channel: Channel) {
         my_logger::LOGGER.write_info(
             "GrpcChannelPoolInner::set",
             "GRPC Connection is established",
             LogEventCtx::new()
                 .add("GrpcClient", service_name)
-                .add("Host".to_string(), host.to_string()),
+                .add("Host".to_string(), host.as_str()),
         );
 
         let mut channel_access = self.channel.lock().await;
@@ -62,7 +63,7 @@ impl GrpcChannelHolder {
                 err,
                 LogEventCtx::new()
                     .add("GrpcClient", disconnected_channel.service_name)
-                    .add("Host", disconnected_channel.host),
+                    .add("Host", disconnected_channel.host.as_str()),
             );
         }
     }
@@ -103,13 +104,16 @@ impl GrpcChannelHolder {
     #[cfg(feature = "with-unix-socket")]
     async fn connect_to_unix_socket(
         &self,
-        connect_url: String,
+        connect_url: GrpcConnectUrl,
         service_name: &'static str,
         request_timeout: Duration,
     ) -> Result<Channel, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
-            let feature = Self::create_unix_socket_channel(connect_url.clone(), service_name);
+            let feature = Self::create_unix_socket_channel(
+                connect_url.get_grpc_host().to_string(),
+                service_name,
+            );
 
             match tokio::time::timeout(request_timeout, feature).await {
                 Ok(result) => match result {
@@ -138,41 +142,46 @@ impl GrpcChannelHolder {
 
     pub async fn create_channel(
         &self,
-        connect_url: String,
+        connect_url: impl Into<GrpcConnectUrl>,
         service_name: &'static str,
         request_timeout: Duration,
         #[cfg(feature = "with-ssh")] ssh_target: crate::ssh::SshTargetInner,
     ) -> Result<Channel, GrpcReadError> {
-        let grpc_service_endpoint = RemoteEndpoint::try_parse(&connect_url);
-
-        if grpc_service_endpoint.is_err() {
-            panic!(
-                "Failed to parse grpc service endpoint: {} for service {}",
-                connect_url, service_name
-            );
-        }
-
-        let _grpc_service_endpoint = grpc_service_endpoint.unwrap();
+        let connect_url = connect_url.into();
 
         #[cfg(feature = "with-unix-socket")]
-        if connect_url.starts_with("/") || connect_url.starts_with("~/") {
+        if connect_url.is_unix_socket() {
             return self
                 .connect_to_unix_socket(connect_url, service_name, request_timeout)
                 .await;
         }
 
         #[cfg(feature = "with-ssh")]
-        if let Some(ssh_credentials) = &ssh_target.credentials {
-            let unix_socket_name =
-                crate::ssh::generate_unix_socket_file(ssh_credentials, _grpc_service_endpoint);
+        if let Some(ssh_credentials) = connect_url.get_ssh_credentials() {
+            let grpc_service_endpoint = rust_extensions::remote_endpoint::RemoteEndpoint::try_parse(
+                connect_url.get_grpc_host(),
+            );
 
-            let ssh_session = ssh_target.get_ssh_session().await;
+            if grpc_service_endpoint.is_err() {
+                panic!(
+                    "Failed to parse grpc service endpoint: {} for service {}",
+                    connect_url.as_str(),
+                    service_name
+                );
+            }
+
+            let grpc_service_endpoint = grpc_service_endpoint.unwrap();
+
+            let unix_socket_name =
+                crate::ssh::generate_unix_socket_file(ssh_credentials, grpc_service_endpoint);
+
+            let ssh_session = ssh_target.get_ssh_session(ssh_credentials);
 
             super::PORT_FORWARDS_POOL
                 .start_port_forward(
                     &ssh_session,
                     unix_socket_name.as_str(),
-                    _grpc_service_endpoint,
+                    grpc_service_endpoint,
                 )
                 .await;
 
@@ -183,12 +192,13 @@ impl GrpcChannelHolder {
 
         let mut attempt_no = 0;
         loop {
-            let end_point = Channel::from_shared(connect_url.clone());
+            let end_point = Channel::from_shared(connect_url.get_grpc_host().to_string());
 
             if let Err(err) = end_point {
                 panic!(
                     "Failed to create channel with url:{}. Err: {:?}",
-                    connect_url, err
+                    connect_url.as_str(),
+                    err
                 )
             }
 
@@ -199,7 +209,7 @@ impl GrpcChannelHolder {
             let end_point = end_point.unwrap();
 
             #[cfg(feature = "with-tls")]
-            if connect_url.to_lowercase().starts_with("https") {
+            if connect_url.is_grpc_tls_endpoint() {
                 let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
                 let tls = ClientTlsConfig::new()
                     .ca_certificate(cert)
