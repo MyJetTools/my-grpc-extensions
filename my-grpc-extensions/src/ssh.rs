@@ -6,6 +6,7 @@ use tokio::sync::Mutex;
 
 use crate::GrpcConnectUrl;
 
+#[async_trait::async_trait]
 pub trait GrpcClientSsh {
     async fn set_ssh_private_key_resolver(
         &self,
