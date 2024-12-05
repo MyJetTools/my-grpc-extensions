@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 #[async_trait::async_trait]
 pub trait GrpcClientSsh {
-    async fn set_ssh_private_key(&mut self, private_key: String, pass_phrase: Option<String>);
+    async fn set_ssh_private_key(&self, private_key: String, pass_phrase: Option<String>);
 }
 
 #[derive(Clone)]
