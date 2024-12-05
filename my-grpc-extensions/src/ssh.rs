@@ -4,8 +4,6 @@ use my_ssh::*;
 use rust_extensions::remote_endpoint::RemoteEndpoint;
 use tokio::sync::Mutex;
 
-use crate::GrpcConnectUrl;
-
 #[async_trait::async_trait]
 pub trait GrpcClientSsh {
     async fn set_ssh_security_credentials_resolver(
@@ -46,8 +44,12 @@ impl SshTargetInner {
 
     pub async fn get_ssh_session(&self, ssh_credentials: &SshCredentials) -> Arc<SshSession> {
         let ssh_credentials = self.get_ssh_credentials(ssh_credentials).await;
-        let ssh_session = my_ssh::SshSession::new(Arc::new(ssh_credentials));
-        std::sync::Arc::new(ssh_session)
+        let ssh_credentials = Arc::new(ssh_credentials);
+        let ssh_session = my_ssh::SSH_SESSIONS_POOL
+            .get_or_create(&ssh_credentials)
+            .await;
+
+        ssh_session
     }
 }
 
@@ -80,7 +82,7 @@ impl SshTarget {
 pub fn generate_unix_socket_file(
     ssh_credentials: &SshCredentials,
     remote_host: RemoteEndpoint,
-) -> GrpcConnectUrl {
+) -> String {
     let (ssh_host, ssh_port) = ssh_credentials.get_host_port();
 
     let r_host = remote_host.get_host();
@@ -94,7 +96,7 @@ pub fn generate_unix_socket_file(
         Err(_) => "/tmp".to_string(),
     };
 
-    let result = format!(
+    format!(
         "{}/grpc-{}-{}_{}--{}_{}.sock",
         root_path,
         ssh_credentials.get_user_name(),
@@ -102,7 +104,5 @@ pub fn generate_unix_socket_file(
         ssh_port,
         r_host,
         r_port
-    );
-
-    result.into()
+    )
 }

@@ -13,7 +13,7 @@ use super::GrpcConnectUrl;
 
 pub struct ChannelData {
     pub channel: Channel,
-    pub host: GrpcConnectUrl,
+    pub host: String,
     pub service_name: &'static str,
 }
 
@@ -28,15 +28,7 @@ impl GrpcChannelHolder {
         }
     }
 
-    async fn set(&self, service_name: &'static str, host: GrpcConnectUrl, channel: Channel) {
-        my_logger::LOGGER.write_info(
-            "GrpcChannelPoolInner::set",
-            "GRPC Connection is established",
-            LogEventCtx::new()
-                .add("GrpcClient", service_name)
-                .add("Host".to_string(), host.as_str()),
-        );
-
+    async fn set(&self, service_name: &'static str, host: String, channel: Channel) {
         let mut channel_access = self.channel.lock().await;
         *channel_access = Some(ChannelData {
             channel,
@@ -45,7 +37,7 @@ impl GrpcChannelHolder {
         });
     }
 
-    pub async fn reuse_existing_channel(&self) -> Option<Channel> {
+    pub async fn get(&self) -> Option<Channel> {
         let channel_access = self.channel.lock().await;
 
         let channel = channel_access.as_ref()?;
@@ -104,22 +96,28 @@ impl GrpcChannelHolder {
     #[cfg(feature = "with-unix-socket")]
     async fn connect_to_unix_socket(
         &self,
-        connect_url: GrpcConnectUrl,
+        connect_url: String,
         service_name: &'static str,
         request_timeout: Duration,
     ) -> Result<Channel, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
-            let feature = Self::create_unix_socket_channel(
-                connect_url.get_grpc_host().to_string(),
-                service_name,
-            );
+            let feature = Self::create_unix_socket_channel(connect_url.to_string(), service_name);
 
             match tokio::time::timeout(request_timeout, feature).await {
                 Ok(result) => match result {
                     Ok(channel) => {
                         {
-                            self.set(service_name, connect_url, channel.clone()).await;
+                            self.set(service_name, connect_url.to_string(), channel.clone())
+                                .await;
+
+                            my_logger::LOGGER.write_info(
+                                "connect_to_unix_socket",
+                                "GRPC Connection is established",
+                                LogEventCtx::new()
+                                    .add("GrpcClient", service_name)
+                                    .add("Host".to_string(), connect_url.as_str()),
+                            );
                         }
                         return Ok(channel);
                     }
@@ -152,7 +150,11 @@ impl GrpcChannelHolder {
         #[cfg(feature = "with-unix-socket")]
         if connect_url.is_unix_socket() {
             return self
-                .connect_to_unix_socket(connect_url, service_name, request_timeout)
+                .connect_to_unix_socket(
+                    connect_url.get_grpc_host().to_string(),
+                    service_name,
+                    request_timeout,
+                )
                 .await;
         }
 
@@ -179,7 +181,7 @@ impl GrpcChannelHolder {
 
             super::PORT_FORWARDS_POOL
                 .start_port_forward(
-                    &ssh_session,
+                    ssh_session,
                     unix_socket_name.as_str(),
                     grpc_service_endpoint,
                 )
@@ -221,7 +223,20 @@ impl GrpcChannelHolder {
                 Ok(channel) => match channel {
                     Ok(channel) => {
                         {
-                            self.set(service_name, connect_url, channel.clone()).await;
+                            self.set(
+                                service_name,
+                                connect_url.get_grpc_host().to_string(),
+                                channel.clone(),
+                            )
+                            .await;
+
+                            my_logger::LOGGER.write_info(
+                                "create_channel",
+                                "GRPC Connection is established",
+                                LogEventCtx::new()
+                                    .add("GrpcClient", service_name)
+                                    .add("Host".to_string(), connect_url.as_str()),
+                            );
                         }
                         return Ok(channel);
                     }

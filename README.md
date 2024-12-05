@@ -60,10 +60,6 @@ my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/My
         ssh_user_name: "user".to_string(),
     };
 
-  //part of my_ssh library. 
-    let ssh_sessions_pool:Arc<_> = SshSessionsPool::new().into();
-
-
    //Enabling SSH connection
     grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
 

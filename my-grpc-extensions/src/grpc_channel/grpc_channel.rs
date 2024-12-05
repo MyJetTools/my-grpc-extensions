@@ -53,7 +53,7 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
     }
 
     pub async fn get_channel(&self) -> Result<Channel, GrpcReadError> {
-        if let Some(channel) = self.grpc_channel_holder.reuse_existing_channel().await {
+        if let Some(channel) = self.grpc_channel_holder.get().await {
             return Ok(channel);
         }
 

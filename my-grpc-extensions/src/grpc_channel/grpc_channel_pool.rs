@@ -109,6 +109,40 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
     }
 }
 
+async fn get_or_create_channel<TService: Send + Sync + 'static>(
+    #[cfg(feature = "with-ssh")] ssh_target: &crate::SshTarget,
+    grpc_channel_holder: &Arc<GrpcChannelHolder>,
+    grpc_client_settings: &Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
+    grpc_service_factory: &Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
+    request_timeout: Duration,
+) -> Result<Channel, GrpcReadError> {
+    match grpc_channel_holder.get().await {
+        Some(channel) => Ok(channel),
+        None => {
+            let connect_url = grpc_client_settings
+                .get_grpc_url(grpc_service_factory.get_service_name())
+                .await;
+            my_logger::LOGGER.write_warning(
+                "GrpcChannel::ping_channel",
+                "Channel is not available. Creating One",
+                LogEventCtx::new()
+                    .add("GrpcClient", grpc_service_factory.get_service_name())
+                    .add("Host", connect_url.to_string()),
+            );
+
+            grpc_channel_holder
+                .create_channel(
+                    connect_url,
+                    grpc_service_factory.get_service_name(),
+                    request_timeout,
+                    #[cfg(feature = "with-ssh")]
+                    ssh_target.get_value().await,
+                )
+                .await
+        }
+    }
+}
+
 async fn ping_loop<TService: Send + Sync + 'static>(
     #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
     enable_ping: Arc<UnsafeValue<bool>>,
@@ -123,31 +157,16 @@ async fn ping_loop<TService: Send + Sync + 'static>(
             tokio::time::sleep(ping_interval).await;
             continue;
         }
-        let channel = match grpc_channel_holder.reuse_existing_channel().await {
-            Some(channel) => Ok(channel),
-            None => {
-                let connect_url = grpc_client_settings
-                    .get_grpc_url(grpc_service_factory.get_service_name())
-                    .await;
-                my_logger::LOGGER.write_warning(
-                    "GrpcChannel::ping_channel",
-                    "Channel is not available. Creating One",
-                    LogEventCtx::new()
-                        .add("GrpcClient", grpc_service_factory.get_service_name())
-                        .add("Host", connect_url.to_string()),
-                );
 
-                grpc_channel_holder
-                    .create_channel(
-                        connect_url,
-                        grpc_service_factory.get_service_name(),
-                        request_timeout,
-                        #[cfg(feature = "with-ssh")]
-                        ssh_target.get_value().await,
-                    )
-                    .await
-            }
-        };
+        let channel = get_or_create_channel(
+            #[cfg(feature = "with-ssh")]
+            &ssh_target,
+            &grpc_channel_holder,
+            &grpc_client_settings,
+            &grpc_service_factory,
+            request_timeout,
+        )
+        .await;
 
         match channel {
             Ok(channel) => {
