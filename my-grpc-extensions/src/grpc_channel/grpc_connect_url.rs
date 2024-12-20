@@ -42,7 +42,7 @@ impl GrpcConnectUrl {
         }
     }
     #[cfg(feature = "with-ssh")]
-    pub fn get_ssh_credentials(&self) -> Option<&my_ssh::SshCredentials> {
+    pub fn get_ssh_credentials(&self) -> Option<&std::sync::Arc<my_ssh::SshCredentials>> {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.ssh_credentials.as_ref(),
             #[cfg(feature = "with-unix-socket")]

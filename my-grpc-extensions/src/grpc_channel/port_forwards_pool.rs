@@ -61,7 +61,7 @@ impl PortForwardsPool {
             "Starting port forward :[{}]->[{}]->[{}]",
             unix_socket,
             ssh_session.get_ssh_credentials().to_string(),
-            grpc_service_endpoint.get_host_port(None)
+            grpc_service_endpoint.get_host_port()
         );
 
         let result = ssh_session
