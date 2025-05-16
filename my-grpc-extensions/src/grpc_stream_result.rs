@@ -28,6 +28,13 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
             .unwrap();
     }
 
+    pub async fn send_error(&self, err: tonic::Status) {
+        self.tx
+            .send_timeout(Result::<_, tonic::Status>::Err(err), self.time_out)
+            .await
+            .unwrap();
+    }
+
     pub fn get_result(
         &mut self,
     ) -> Result<
