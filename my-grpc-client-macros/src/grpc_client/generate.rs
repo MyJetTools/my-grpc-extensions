@@ -47,6 +47,12 @@ pub fn generate(
     let ping_interval_sec:u64 = params_list.get_named_param("ping_interval_sec")?.try_into()?;
     let timeout_sec:u64 = params_list.get_named_param("request_timeout_sec")?.try_into()?;
     let retries:usize = params_list.get_named_param("retries")?.try_into()?;
+    let use_streams:Option<bool> = match params_list.try_get_named_param("use_streams"){
+        Some(value) => Some(value.try_into()?),
+        None => None,
+    };
+
+    let use_streams = use_streams.unwrap_or(false);
     
     let crate_ns:String = params_list.get_named_param("crate_ns")?.try_into()?;
     let mut use_name_spaces = Vec::new();
@@ -69,7 +75,7 @@ pub fn generate(
         }
     }
     
-    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry);
+    let grpc_methods = super::generate_grpc_methods(&proto_file, retries, &overrides, with_telemetry, use_streams);
 
 
     let fn_create_service = if with_telemetry{

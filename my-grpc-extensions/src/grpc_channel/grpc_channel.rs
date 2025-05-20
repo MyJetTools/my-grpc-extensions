@@ -117,9 +117,7 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         RequestBuilder::new(input_contract, self)
     }
 
-    pub fn start_request_with_input_prams_as_stream<
-        TInputContract: Clone + Send + Sync + 'static,
-    >(
+    pub fn start_request_with_input_prams_as_vec<TInputContract: Clone + Send + Sync + 'static>(
         self,
         input_contract: Vec<TInputContract>,
     ) -> RequestBuilderWithInputStream<TService, TInputContract> {
