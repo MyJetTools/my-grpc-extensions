@@ -35,7 +35,7 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
             .unwrap();
     }
 
-    pub async fn get_stream_producer(&mut self) -> GrpcStreamProducer<TResult> {
+    pub fn get_stream_producer(&mut self) -> GrpcStreamProducer<TResult> {
         GrpcStreamProducer {
             tx: self.tx.clone(),
             time_out: self.time_out,
