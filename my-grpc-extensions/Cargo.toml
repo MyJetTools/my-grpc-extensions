@@ -17,7 +17,7 @@ with-ssh = ["my-ssh", "my-grpc-client-macros?/with-ssh"]
 
 
 [dependencies]
-my-telemetry = { tag = "1.2.1", git = "https://github.com/MyJetTools/my-telemetry.git", features = [
+my-telemetry = { tag = "1.2.2", git = "https://github.com/MyJetTools/my-telemetry.git", features = [
     "my-telemetry-writer",
 ], optional = true }
 
