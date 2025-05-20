@@ -1,7 +1,7 @@
-use std::{pin::Pin, time::Duration};
+use std::{pin::Pin, sync::Arc, time::Duration};
 
 pub struct GrpcOutputStream<TResult: Send + Sync + 'static> {
-    tx: tokio::sync::mpsc::Sender<Result<TResult, tonic::Status>>,
+    tx: Arc<tokio::sync::mpsc::Sender<Result<TResult, tonic::Status>>>,
     rx: Option<tokio::sync::mpsc::Receiver<Result<TResult, tonic::Status>>>,
     time_out: Duration,
 }
@@ -10,7 +10,7 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
     pub fn new(channel_size: usize) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(channel_size);
         Self {
-            tx,
+            tx: Arc::new(tx),
             rx: Some(rx),
             time_out: Duration::from_secs(10),
         }
@@ -33,6 +33,13 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
             .send_timeout(Result::<_, tonic::Status>::Err(err), self.time_out)
             .await
             .unwrap();
+    }
+
+    pub async fn get_stream_producer(&mut self) -> GrpcStreamProducer<TResult> {
+        GrpcStreamProducer {
+            tx: self.tx.clone(),
+            time_out: self.time_out,
+        }
     }
 
     pub fn get_result(
@@ -71,5 +78,26 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
             >,
         > = Box::pin(output_stream);
         return Ok(tonic::Response::new(response));
+    }
+}
+
+pub struct GrpcStreamProducer<TResult: Send + Sync + 'static> {
+    tx: Arc<tokio::sync::mpsc::Sender<Result<TResult, tonic::Status>>>,
+    time_out: Duration,
+}
+
+impl<TResult: Send + Sync + 'static> GrpcStreamProducer<TResult> {
+    pub async fn send(&self, item: TResult) {
+        self.tx
+            .send_timeout(Result::<_, tonic::Status>::Ok(item), self.time_out)
+            .await
+            .unwrap();
+    }
+
+    pub async fn send_error(&self, err: tonic::Status) {
+        self.tx
+            .send_timeout(Result::<_, tonic::Status>::Err(err), self.time_out)
+            .await
+            .unwrap();
     }
 }
