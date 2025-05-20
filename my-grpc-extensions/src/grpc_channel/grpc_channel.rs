@@ -121,9 +121,9 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         TInputContract: Clone + Send + Sync + 'static,
     >(
         self,
-        input_contract: StreamedRequest<TInputContract>,
+        input_contract: impl Into<StreamedRequest<TInputContract>>,
     ) -> RequestBuilderWithInputStream<TService, TInputContract> {
-        RequestBuilderWithInputStream::new(input_contract, self)
+        RequestBuilderWithInputStream::new(input_contract.into(), self)
     }
 
     pub async fn execute<
@@ -250,7 +250,7 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         TExecutor: RequestWithInputAsStreamGrpcExecutor<TService, TRequest, TResponse> + Send + Sync + 'static,
     >(
         &mut self,
-        request_data: StreamedRequestConsumer<TRequest>,
+        request_data: &StreamedRequest<TRequest>,
         grpc_executor: &TExecutor,
     ) -> Result<TResponse, GrpcReadError> {
         let service = self
@@ -300,7 +300,7 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
             )
             .await?;
 
-        let future = grpc_executor.execute(service, request_data.get_consumer());
+        let future = grpc_executor.execute(service, &request_data);
 
         let result = tokio::time::timeout(self.request_timeout, future).await;
 
@@ -362,7 +362,7 @@ pub trait RequestWithInputAsStreamGrpcExecutor<
     async fn execute(
         &self,
         service: TService,
-        input_data: StreamedRequestConsumer<TRequest>,
+        input_data: &StreamedRequest<TRequest>,
     ) -> Result<TResponse, tonic::Status>;
 }
 
@@ -376,6 +376,6 @@ pub trait RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor<
     async fn execute(
         &self,
         service: TService,
-        input_data: StreamedRequestConsumer<TRequest>,
+        input_data: &StreamedRequest<TRequest>,
     ) -> Result<tonic::Streaming<TResponse>, tonic::Status>;
 }

@@ -46,7 +46,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         TResponse: Send + Sync + 'static,
     {
         self.channel
-            .execute_input_as_stream(self.input_contract.get_consumer(), grpc_executor)
+            .execute_input_as_stream(&self.input_contract, grpc_executor)
             .await
     }
 

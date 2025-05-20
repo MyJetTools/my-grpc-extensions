@@ -3,6 +3,8 @@ use std::{
     time::Duration,
 };
 
+use tokio_stream::wrappers::ReceiverStream;
+
 use super::StreamedRequestInner;
 
 // Producer
@@ -14,6 +16,7 @@ pub struct StreamedRequestConsumer<TItem: Clone> {
 
 impl<TItem: Clone> StreamedRequestConsumer<TItem> {
     pub fn new(inner: Arc<StreamedRequestInner<TItem>>) -> Self {
+        let mut stream = ReceiverStream::new(rx);
         Self {
             inner,
             index: AtomicUsize::new(0),

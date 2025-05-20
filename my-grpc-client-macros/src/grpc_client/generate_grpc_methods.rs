@@ -7,7 +7,6 @@ pub fn generate_grpc_methods(
     retries_amount: usize,
     overrides: &HashMap<String, FnOverride>,
     width_telemetry: bool,
-    use_stream: bool,
 ) -> Vec<proc_macro2::TokenStream> {
     let mut result = Vec::new();
 
@@ -18,7 +17,7 @@ pub fn generate_grpc_methods(
 
         let output_param = rpc.get_output_param();
 
-        let input_data_type = get_func_in_data_type(input_param.as_ref(), use_stream);
+        let input_data_type = get_func_in_data_type(input_param.as_ref());
 
         let output_data_type = get_func_out_data_type(output_param.as_ref());
 
@@ -80,7 +79,7 @@ fn get_request_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macro
     match input_param {
         Some(input_param) => {
             if input_param.is_stream() {
-                quote::quote! {start_request_with_input_prams_as_vec}
+                quote::quote! {start_request_with_input_prams_as_stream}
             } else {
                 quote::quote! {start_request}
             }
@@ -95,9 +94,7 @@ fn get_response_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macr
     match input_param {
         Some(input_param) => {
             if input_param.is_stream() {
-                quote::quote! {get_streamed_response(self).await?
-                .as_vec()
-                .await?}
+                quote::quote! {get_streamed_response(self).await?}
             } else {
                 quote::quote! {get_response(self).await?}
             }
@@ -108,20 +105,13 @@ fn get_response_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macr
     }
 }
 
-fn get_func_in_data_type(
-    data_type: Option<&super::ParamType<'_>>,
-    use_stream: bool,
-) -> proc_macro2::TokenStream {
+fn get_func_in_data_type(data_type: Option<&super::ParamType<'_>>) -> proc_macro2::TokenStream {
     match data_type {
         Some(input_param) => match input_param {
             ParamType::Single(name) => proc_macro2::TokenStream::from_str(name).unwrap(),
             ParamType::Stream(name) => {
-                if use_stream {
-                    quote::quote!(my_grpc_extensions::)
-                } else {
-                    let param = proc_macro2::TokenStream::from_str(name).unwrap();
-                    quote::quote!(Vec<#param>)
-                }
+                let param = proc_macro2::TokenStream::from_str(name).unwrap();
+                quote::quote!(Vec<#param>)
             }
         },
         None => {
@@ -136,7 +126,7 @@ fn get_func_out_data_type(data_type: Option<&super::ParamType<'_>>) -> proc_macr
             ParamType::Single(name) => proc_macro2::TokenStream::from_str(name).unwrap(),
             ParamType::Stream(name) => {
                 let param = proc_macro2::TokenStream::from_str(name).unwrap();
-                quote::quote!(Option<Vec<#param>>)
+                quote::quote!(my_grpc_extensions::StreamedResponse<#param>)
             }
         },
         None => {

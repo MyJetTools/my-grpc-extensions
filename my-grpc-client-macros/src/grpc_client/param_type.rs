@@ -52,7 +52,7 @@ impl<'s> ParamType<'s> {
         match self {
             Self::Single(_) => proc_macro2::TokenStream::from_str("input_data").unwrap(),
             Self::Stream(_) => {
-                quote::quote!(futures::stream::iter(input_data))
+                quote::quote!(input_data.get_consumer())
             }
         }
     }

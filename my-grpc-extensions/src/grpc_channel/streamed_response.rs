@@ -2,8 +2,8 @@ use std::{collections::HashMap, time::Duration};
 
 use crate::GrpcReadError;
 
-pub struct StreamedResponse<TResponse> {
-    stream: tonic::Streaming<TResponse>,
+pub struct StreamedResponse<TItem> {
+    stream: tonic::Streaming<TItem>,
     time_out: Duration,
 }
 
@@ -12,11 +12,11 @@ impl<TResponse> StreamedResponse<TResponse> {
         Self { stream, time_out }
     }
 
-    pub async fn as_vec(self) -> Result<Option<Vec<TResponse>>, GrpcReadError> {
+    pub async fn into_vec(self) -> Result<Option<Vec<TResponse>>, GrpcReadError> {
         crate::read_grpc_stream::as_vec(self.stream, self.time_out).await
     }
 
-    pub async fn as_vec_with_transformation<TDest>(
+    pub async fn into_vec_with_transformation<TDest>(
         self,
         transform: impl Fn(TResponse) -> TDest,
     ) -> Result<Option<Vec<TDest>>, GrpcReadError> {
@@ -24,7 +24,7 @@ impl<TResponse> StreamedResponse<TResponse> {
             .await
     }
 
-    pub async fn as_has_map<TKey, TGetKey: Fn(TResponse) -> (TKey, TResponse)>(
+    pub async fn into_has_map<TKey, TGetKey: Fn(TResponse) -> (TKey, TResponse)>(
         self,
         get_key: TGetKey,
     ) -> Result<Option<HashMap<TKey, TResponse>>, GrpcReadError>
@@ -32,5 +32,17 @@ impl<TResponse> StreamedResponse<TResponse> {
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
         crate::read_grpc_stream::as_hash_map(self.stream, &get_key, self.time_out).await
+    }
+
+    pub async fn get_next_item(&mut self) -> Option<TResponse> {
+        use futures_util::StreamExt;
+        let future = self.stream.next();
+
+        let result = match tokio::time::timeout(self.time_out, future).await {
+            Ok(result) => result?,
+            Err(_) => panic!("Timeout {:?}", self.time_out),
+        };
+
+        Some(result.unwrap())
     }
 }

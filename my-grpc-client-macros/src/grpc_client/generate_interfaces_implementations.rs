@@ -173,7 +173,7 @@ fn get_name_fn_param_type_token(src: &ParamType<'_>) -> proc_macro2::TokenStream
         ParamType::Single(name) => proc_macro2::TokenStream::from_str(name).unwrap(),
         ParamType::Stream(name) => {
             let name = proc_macro2::TokenStream::from_str(name).unwrap();
-            quote::quote!(Vec<#name>)
+            quote::quote!(&my_grpc_extensions::StreamedRequest<#name>)
         }
     }
 }
