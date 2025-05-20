@@ -6,9 +6,6 @@ use tonic::transport::Channel;
 
 use crate::GrpcReadError;
 
-#[cfg(feature = "with-tls")]
-use tonic::transport::{Certificate, ClientTlsConfig};
-
 use super::GrpcConnectUrl;
 
 pub struct ChannelData {
@@ -212,11 +209,12 @@ impl GrpcChannelHolder {
 
             #[cfg(feature = "with-tls")]
             if connect_url.is_grpc_tls_endpoint() {
-                let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
-                let tls = ClientTlsConfig::new()
-                    .ca_certificate(cert)
-                    .domain_name(super::extract_domain_name(connect_url.as_str()));
-                end_point = end_point.tls_config(tls).unwrap();
+                //let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
+                // let tls = ClientTlsConfig::new()
+                //    .ca_certificate(cert)
+                //    .domain_name(super::extract_domain_name(connect_url.as_str()));
+                // end_point = end_point.tls_config(tls).unwrap();
+                panic!("Tls not implemented yet");
             }
 
             match tokio::time::timeout(request_timeout, end_point.connect()).await {
