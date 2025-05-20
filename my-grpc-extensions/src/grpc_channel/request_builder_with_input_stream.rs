@@ -4,18 +4,20 @@ use crate::{
     StreamedResponse,
 };
 
+use super::StreamedRequest;
+
 pub struct RequestBuilderWithInputStream<
     TService: Send + Sync + 'static,
     TRequest: Clone + Send + Sync + 'static,
 > {
-    input_contract: Vec<TRequest>,
+    input_contract: StreamedRequest<TRequest>,
     channel: GrpcChannel<TService>,
 }
 
 impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     RequestBuilderWithInputStream<TService, TRequest>
 {
-    pub fn new(input_contract: Vec<TRequest>, channel: GrpcChannel<TService>) -> Self {
+    pub fn new(input_contract: StreamedRequest<TRequest>, channel: GrpcChannel<TService>) -> Self {
         Self {
             input_contract,
             channel,
@@ -44,7 +46,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         TResponse: Send + Sync + 'static,
     {
         self.channel
-            .execute_input_as_stream(self.input_contract, grpc_executor)
+            .execute_input_as_stream(self.input_contract.get_consumer(), grpc_executor)
             .await
     }
 
@@ -63,7 +65,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     {
         let stream_to_read = self
             .channel
-            .execute_input_as_stream_response_as_stream(self.input_contract, grpc_executor)
+            .execute_input_as_stream_response_as_stream(&self.input_contract, grpc_executor)
             .await?;
 
         Ok(StreamedResponse::new(

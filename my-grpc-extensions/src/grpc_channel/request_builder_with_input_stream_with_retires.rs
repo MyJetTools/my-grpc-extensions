@@ -1,13 +1,12 @@
-use crate::{
-    GrpcChannel, GrpcReadError, RequestWithInputAsStreamGrpcExecutor,
-    RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor, StreamedResponse,
-};
+use crate::{GrpcChannel, GrpcReadError, RequestWithInputAsStreamGrpcExecutor, StreamedResponse};
+
+use super::{RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor, StreamedRequest};
 
 pub struct RequestBuilderWithInputStreamWithRetries<
     TService: Send + Sync + 'static,
     TRequest: Clone + Send + Sync + 'static,
 > {
-    input_contract: Vec<TRequest>,
+    input_contract: StreamedRequest<TRequest>,
     channel: GrpcChannel<TService>,
     max_attempts_amount: usize,
 }
@@ -16,7 +15,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
     RequestBuilderWithInputStreamWithRetries<TService, TRequest>
 {
     pub fn new(
-        input_contract: Vec<TRequest>,
+        input_contract: StreamedRequest<TRequest>,
         channel: GrpcChannel<TService>,
         max_attempts_amount: usize,
     ) -> Self {
@@ -41,7 +40,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         loop {
             let result = self
                 .channel
-                .execute_input_as_stream(self.input_contract.clone(), grpc_executor)
+                .execute_input_as_stream(self.input_contract.get_consumer(), grpc_executor)
                 .await;
 
             match result {
@@ -74,10 +73,7 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
         loop {
             let result = self
                 .channel
-                .execute_input_as_stream_response_as_stream(
-                    self.input_contract.clone(),
-                    grpc_executor,
-                )
+                .execute_input_as_stream_response_as_stream(&self.input_contract, grpc_executor)
                 .await;
 
             match result {

@@ -20,6 +20,8 @@ pub use request_builder_with_retries::*;
 pub use streamed_response::*;
 mod grpc_connect_url;
 pub use grpc_connect_url::*;
+mod streamed_request;
+pub use streamed_request::*;
 
 #[cfg(feature = "with-tls")]
 fn extract_domain_name(src: &str) -> &str {
