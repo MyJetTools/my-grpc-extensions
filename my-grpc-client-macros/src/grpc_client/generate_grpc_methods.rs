@@ -111,7 +111,7 @@ fn get_func_in_data_type(data_type: Option<&super::ParamType<'_>>) -> proc_macro
             ParamType::Single(name) => proc_macro2::TokenStream::from_str(name).unwrap(),
             ParamType::Stream(name) => {
                 let param = proc_macro2::TokenStream::from_str(name).unwrap();
-                quote::quote!(my_grpc_extensions::StreamedRequest<#param>)
+                quote::quote!(impl Into<my_grpc_extensions::StreamedRequest<#param>>)
             }
         },
         None => {
