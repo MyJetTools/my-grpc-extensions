@@ -12,14 +12,14 @@ impl<TResponse> StreamedResponse<TResponse> {
         Self { stream, time_out }
     }
 
-    pub async fn into_vec(self) -> Result<Option<Vec<TResponse>>, GrpcReadError> {
+    pub async fn into_vec(self) -> Result<Vec<TResponse>, GrpcReadError> {
         crate::read_grpc_stream::as_vec(self.stream, self.time_out).await
     }
 
     pub async fn into_vec_with_transformation<TDest>(
         self,
         transform: impl Fn(TResponse) -> TDest,
-    ) -> Result<Option<Vec<TDest>>, GrpcReadError> {
+    ) -> Result<Vec<TDest>, GrpcReadError> {
         crate::read_grpc_stream::as_vec_with_transformation(self.stream, self.time_out, &transform)
             .await
     }
@@ -27,7 +27,7 @@ impl<TResponse> StreamedResponse<TResponse> {
     pub async fn into_has_map<TKey, TGetKey: Fn(TResponse) -> (TKey, TResponse)>(
         self,
         get_key: TGetKey,
-    ) -> Result<Option<HashMap<TKey, TResponse>>, GrpcReadError>
+    ) -> Result<HashMap<TKey, TResponse>, GrpcReadError>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
