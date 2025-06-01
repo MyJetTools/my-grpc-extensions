@@ -49,7 +49,7 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
             .get_grpc_url(self.service_factory.get_service_name())
             .await;
 
-        return settings.into();
+        return settings.url.into();
     }
 
     pub async fn get_channel(&self) -> Result<Channel, GrpcReadError> {

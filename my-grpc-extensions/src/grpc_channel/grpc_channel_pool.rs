@@ -19,7 +19,21 @@ pub enum GrpcReadError {
 
 #[async_trait::async_trait]
 pub trait GrpcClientSettings {
-    async fn get_grpc_url(&self, name: &'static str) -> String;
+    async fn get_grpc_url(&self, name: &'static str) -> GrpcUrl;
+}
+
+pub struct GrpcUrl {
+    pub url: String,
+    pub host_metadata: Option<String>,
+}
+
+impl Into<GrpcUrl> for String {
+    fn into(self) -> GrpcUrl {
+        GrpcUrl {
+            url: self,
+            host_metadata: None,
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -119,7 +133,7 @@ async fn get_or_create_channel<TService: Send + Sync + 'static>(
     match grpc_channel_holder.get().await {
         Some(channel) => Ok(channel),
         None => {
-            let connect_url = grpc_client_settings
+            let grpc_url = grpc_client_settings
                 .get_grpc_url(grpc_service_factory.get_service_name())
                 .await;
             my_logger::LOGGER.write_warning(
@@ -127,12 +141,12 @@ async fn get_or_create_channel<TService: Send + Sync + 'static>(
                 "Channel is not available. Creating One",
                 LogEventCtx::new()
                     .add("GrpcClient", grpc_service_factory.get_service_name())
-                    .add("Host", connect_url.to_string()),
+                    .add("Host", grpc_url.url.to_string()),
             );
 
             grpc_channel_holder
                 .create_channel(
-                    connect_url,
+                    grpc_url.url,
                     grpc_service_factory.get_service_name(),
                     request_timeout,
                     #[cfg(feature = "with-ssh")]
@@ -200,17 +214,22 @@ async fn ping_loop<TService: Send + Sync + 'static>(
                 };
             }
             Err(err) => {
+                let mut grpc_url = grpc_client_settings
+                    .get_grpc_url(grpc_service_factory.get_service_name())
+                    .await;
+
+                let mut ctx = LogEventCtx::new()
+                    .add("GrpcClient", grpc_service_factory.get_service_name())
+                    .add("Url", grpc_url.url);
+
+                if let Some(host) = grpc_url.host_metadata.take() {
+                    ctx = ctx.add("HostMetadatas", host);
+                }
+
                 my_logger::LOGGER.write_error(
                     "GrpcChannel::ping_channel",
                     format!("{:?}", err),
-                    LogEventCtx::new()
-                        .add("GrpcClient", grpc_service_factory.get_service_name())
-                        .add(
-                            "Host",
-                            grpc_client_settings
-                                .get_grpc_url(grpc_service_factory.get_service_name())
-                                .await,
-                        ),
+                    ctx,
                 );
             }
         }

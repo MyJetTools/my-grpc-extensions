@@ -41,7 +41,14 @@ pub fn generate_interfaces_implementations(
                             input_data: #input_param_type_token,
                         ) -> Result<#output_param_type_token, tonic::Status> {
 
-                            let request = tonic::Request::new(#input_param_invoke);
+                            let mut request = tonic::Request::new(#input_param_invoke);
+
+                            let settings = self.settings.get_grpc_url().await;
+
+                            if let Some(host_metadata) = settings.host_metadata{
+                                    request.get_metadata_mut().add("Host", host_metadata);
+                            }
+
                             let result = service.#fn_name(request).await?;
                             Ok(result.into_inner())
                         }
