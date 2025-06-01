@@ -43,10 +43,11 @@ pub fn generate_interfaces_implementations(
 
                             let mut request = tonic::Request::new(#input_param_invoke);
 
-                            let settings = self.settings.get_grpc_url().await;
+                            let settings = self.settings.get_grpc_url(Self::get_service_name()).await;
 
                             if let Some(host_metadata) = settings.host_metadata{
-                                    request.get_metadata_mut().add("Host", host_metadata);
+                                let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
+                                request.metadata_mut().add("host", meta_data);
                             }
 
                             let result = service.#fn_name(request).await?;
