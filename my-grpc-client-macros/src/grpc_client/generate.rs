@@ -152,13 +152,15 @@ pub fn generate(
 
       pub struct #struct_name{
         channel: my_grpc_extensions::GrpcChannelPool<TGrpcService>,
+        settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>
       }
 
       impl #struct_name{
-        pub fn new(get_grpc_address: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>,) -> Self {
+        pub fn new(settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>,) -> Self {
             Self {
+                settings: settings.clone(),
                 channel: my_grpc_extensions::GrpcChannelPool::new(
-                    get_grpc_address,
+                    settings,
                     std::sync::Arc::new(MyGrpcServiceFactory),
                     std::time::Duration::from_secs(#timeout_sec),
                     std::time::Duration::from_secs(#ping_timeout_sec),
