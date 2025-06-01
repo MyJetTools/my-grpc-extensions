@@ -32,7 +32,7 @@ pub fn generate_interfaces_implementations(
                         #interface_name<
                             TGrpcService,
                             #input_param_name_token,
-                            #output_param_name_token,
+                            #output_param_name_token
                         > for #struct_name
                     {
                         async fn execute(
@@ -48,7 +48,7 @@ pub fn generate_interfaces_implementations(
                             if let Some(host_metadata) = settings.host_metadata {
                                 use std::str::FromStr;
                                 let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
-                                request.metadata_mut().add("host", meta_data);
+                                request.metadata_mut().insert("host", meta_data);
                             }
 
                             let result = service.#fn_name(request).await?;
@@ -93,7 +93,7 @@ pub fn generate_interfaces_implementations(
                             if let Some(host_metadata) = settings.host_metadata {
                                 use std::str::FromStr;
                                 let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
-                                request.metadata_mut().add("host", meta_data);
+                                request.metadata_mut().insert("host", meta_data);
                             }
 
                             let result = service.#fn_name(request).await?;
@@ -138,7 +138,7 @@ pub fn generate_interfaces_implementations(
                             if let Some(host_metadata) = settings.host_metadata{
                                 use std::str::FromStr;
                                 let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
-                                request.metadata_mut().add("host", meta_data);
+                                request.metadata_mut().insert("host", meta_data);
                             }
 
                             let result = service.#fn_name(request).await?;
