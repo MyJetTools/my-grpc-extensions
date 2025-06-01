@@ -45,7 +45,8 @@ pub fn generate_interfaces_implementations(
 
                             let settings = self.settings.get_grpc_url(Self::get_service_name()).await;
 
-                            if let Some(host_metadata) = settings.host_metadata{
+                            if let Some(host_metadata) = settings.host_metadata {
+                                use std::str::FromStr;
                                 let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
                                 request.metadata_mut().add("host", meta_data);
                             }
@@ -84,7 +85,17 @@ pub fn generate_interfaces_implementations(
                             mut service: TGrpcService,
                             input_data: #input_param_type_token,
                         ) -> Result<#output_param_type_token, tonic::Status> {
-                            let request = tonic::Request::new(#input_param_invoke);
+
+                            let mut request = tonic::Request::new(#input_param_invoke);
+
+                            let settings = self.settings.get_grpc_url(Self::get_service_name()).await;
+
+                            if let Some(host_metadata) = settings.host_metadata {
+                                use std::str::FromStr;
+                                let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
+                                request.metadata_mut().add("host", meta_data);
+                            }
+
                             let result = service.#fn_name(request).await?;
                             Ok(result.into_inner())
                         }
@@ -119,7 +130,18 @@ pub fn generate_interfaces_implementations(
                             mut service: TGrpcService,
                             input_data: #input_param_type_token,
                         ) -> Result<#output_param_type_token, tonic::Status> {
-                            let result = service.#fn_name(()).await?;
+
+                            let mut request = tonic::Request::new(());
+
+                            let settings = self.settings.get_grpc_url(Self::get_service_name()).await;
+
+                            if let Some(host_metadata) = settings.host_metadata{
+                                use std::str::FromStr;
+                                let meta_data = tonic::metadata::MetadataValue::from_str(host_metadata.as_str()).unwrap();
+                                request.metadata_mut().add("host", meta_data);
+                            }
+
+                            let result = service.#fn_name(request).await?;
                             Ok(result.into_inner())
                         }
                     }
