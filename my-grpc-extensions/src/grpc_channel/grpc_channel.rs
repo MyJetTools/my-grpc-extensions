@@ -60,7 +60,8 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         let connect_url = self.get_connect_url().await;
         let service_name = self.service_factory.get_service_name();
 
-        self.grpc_channel_holder
+        let result = self
+            .grpc_channel_holder
             .create_channel(
                 connect_url,
                 service_name,
@@ -68,7 +69,9 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
                 #[cfg(feature = "with-ssh")]
                 self.ssh_target.get_value().await,
             )
-            .await
+            .await?;
+
+        Ok(result)
     }
 
     pub async fn drop_dead_channel(&self, err: String) {
