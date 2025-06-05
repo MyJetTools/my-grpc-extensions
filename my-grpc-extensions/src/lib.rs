@@ -32,3 +32,6 @@ mod grpc_stream_result;
 #[cfg(feature = "grpc-server")]
 pub mod server_stream_result;
 pub use grpc_stream_result::*;
+
+mod streamed_request;
+pub use streamed_request::*;

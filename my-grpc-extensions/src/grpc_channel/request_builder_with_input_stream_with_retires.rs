@@ -1,6 +1,9 @@
-use crate::{GrpcChannel, GrpcReadError, RequestWithInputAsStreamGrpcExecutor, StreamedResponse};
+use crate::{
+    GrpcChannel, GrpcReadError, RequestWithInputAsStreamGrpcExecutor, StreamedRequest,
+    StreamedResponse,
+};
 
-use super::{RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor, StreamedRequest};
+use super::RequestWithInputAsStreamWithResponseAsStreamGrpcExecutor;
 
 pub struct RequestBuilderWithInputStreamWithRetries<
     TService: Send + Sync + 'static,

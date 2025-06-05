@@ -6,7 +6,7 @@ use tonic::transport::Channel;
 
 use crate::{
     GrpcChannelHolder, GrpcClientSettings, GrpcReadError, GrpcServiceFactory, RequestBuilder,
-    RequestBuilderWithInputStream,
+    RequestBuilderWithInputStream, StreamedRequest,
 };
 
 use super::*;

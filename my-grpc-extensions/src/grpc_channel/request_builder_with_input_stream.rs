@@ -4,7 +4,7 @@ use crate::{
     StreamedResponse,
 };
 
-use super::StreamedRequest;
+use crate::StreamedRequest;
 
 pub struct RequestBuilderWithInputStream<
     TService: Send + Sync + 'static,
