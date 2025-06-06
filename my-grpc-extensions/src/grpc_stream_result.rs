@@ -88,10 +88,15 @@ pub struct GrpcStreamProducer<TResult: Send + Sync + 'static> {
 
 impl<TResult: Send + Sync + 'static> GrpcStreamProducer<TResult> {
     pub async fn send(&self, item: TResult) {
-        self.tx
+        let result = self
+            .tx
             .send_timeout(Result::<_, tonic::Status>::Ok(item), self.time_out)
-            .await
-            .unwrap();
+            .await;
+
+        if result.is_err() {
+            eprintln!("Produce timeout: {:?}", self.time_out);
+            panic!("Produce timeout: {:?}", self.time_out)
+        }
     }
 
     pub async fn send_error(&self, err: tonic::Status) {
