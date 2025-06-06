@@ -32,11 +32,21 @@ impl<TModel: Send + Sync + 'static> GrpcServerStreamResult<TModel> {
         self.timeout = timeout;
     }
 
-    pub async fn send(&mut self, item: TModel) {
+    pub async fn send(&mut self, item: TModel) -> Result<(), String> {
         let future = self.tx.send(Ok(item));
-        tokio::time::timeout(self.timeout, future)
-            .await
-            .unwrap()
-            .unwrap();
+        let result = tokio::time::timeout(self.timeout, future).await;
+
+        let result = match result {
+            Ok(result) => result,
+            Err(_) => {
+                return Err(format!("Timeout: {:?}", self.timeout));
+            }
+        };
+
+        if let Err(err) = result {
+            return Err(format!("Send Error: {:?}", err));
+        }
+
+        Ok(())
     }
 }
