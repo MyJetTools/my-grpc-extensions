@@ -16,6 +16,14 @@ impl<TResponse> StreamedResponse<TResponse> {
         crate::read_grpc_stream::as_vec(self.stream, self.time_out).await
     }
 
+    pub fn set_timeout(&mut self, time_out: Duration) {
+        self.time_out = time_out
+    }
+
+    pub fn get_timeout(&mut self) -> Duration {
+        self.time_out
+    }
+
     pub async fn into_vec_with_transformation<TDest>(
         self,
         transform: impl Fn(TResponse) -> TDest,
