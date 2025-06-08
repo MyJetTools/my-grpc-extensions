@@ -42,15 +42,22 @@ impl<TResponse> StreamedResponse<TResponse> {
         crate::read_grpc_stream::as_hash_map(self.stream, &get_key, self.time_out).await
     }
 
-    pub async fn get_next_item(&mut self) -> Option<TResponse> {
+    pub async fn get_next_item(&mut self) -> Result<Option<TResponse>, String> {
         use futures_util::StreamExt;
         let future = self.stream.next();
 
         let result = match tokio::time::timeout(self.time_out, future).await {
-            Ok(result) => result?,
-            Err(_) => panic!("Timeout {:?}", self.time_out),
+            Ok(result) => result,
+            Err(_) => return Err(format!("Timeout {:?}", self.time_out)),
         };
 
-        Some(result.unwrap())
+        let Some(result) = result else {
+            return Ok(None);
+        };
+
+        match result {
+            Ok(result) => Ok(Some(result)),
+            Err(err) => Err(err.to_string()),
+        }
     }
 }
