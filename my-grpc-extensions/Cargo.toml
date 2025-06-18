@@ -30,8 +30,8 @@ lazy_static = "*"
 
 
 my-tls = { tag = "0.1.5", git = "https://github.com/MyJetTools/my-tls.git", optional = true }
-tokio = { version = "*", features = ["full"] }
-tonic = { version = "0.13", features = ["prost"] }
+tokio = { version = "*" }
+tonic = { version = "0.13" }
 hyper = { version = "*" }
 hyper-util = { version = "*", features = ["tokio"] }
 futures-util = "*"
