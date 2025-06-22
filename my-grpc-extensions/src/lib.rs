@@ -35,3 +35,5 @@ pub use grpc_stream_result::*;
 
 mod streamed_request;
 pub use streamed_request::*;
+mod streamed_request_reader;
+pub use streamed_request_reader::*;
