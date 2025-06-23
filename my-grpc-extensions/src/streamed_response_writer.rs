@@ -1,12 +1,15 @@
 use std::{pin::Pin, sync::Arc, time::Duration};
 
-pub struct GrpcOutputStream<TResult: Send + Sync + 'static> {
+#[deprecated(note = "Please use StreamedResultWriter")]
+pub type GrpcOutputStream<TResult> = StreamedResponseWriter<TResult>;
+
+pub struct StreamedResponseWriter<TResult: Send + Sync + 'static> {
     tx: Arc<tokio::sync::mpsc::Sender<Result<TResult, tonic::Status>>>,
     rx: Option<tokio::sync::mpsc::Receiver<Result<TResult, tonic::Status>>>,
     time_out: Duration,
 }
 
-impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
+impl<TResult: Send + Sync + 'static> StreamedResponseWriter<TResult> {
     pub fn new(channel_size: usize) -> Self {
         let (tx, rx) = tokio::sync::mpsc::channel(channel_size);
         Self {
@@ -35,8 +38,8 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
             .unwrap();
     }
 
-    pub fn get_stream_producer(&self) -> GrpcStreamProducer<TResult> {
-        GrpcStreamProducer {
+    pub fn get_stream_producer(&self) -> StreamedResponseProducer<TResult> {
+        StreamedResponseProducer {
             tx: self.tx.clone(),
             time_out: self.time_out,
         }
@@ -81,12 +84,12 @@ impl<TResult: Send + Sync + 'static> GrpcOutputStream<TResult> {
     }
 }
 
-pub struct GrpcStreamProducer<TResult: Send + Sync + 'static> {
+pub struct StreamedResponseProducer<TResult: Send + Sync + 'static> {
     tx: Arc<tokio::sync::mpsc::Sender<Result<TResult, tonic::Status>>>,
     time_out: Duration,
 }
 
-impl<TResult: Send + Sync + 'static> GrpcStreamProducer<TResult> {
+impl<TResult: Send + Sync + 'static> StreamedResponseProducer<TResult> {
     pub async fn send(&self, item: TResult) -> Result<(), String> {
         let result = self
             .tx
