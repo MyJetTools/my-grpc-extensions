@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use tokio::sync::Mutex;
+
 use super::*;
 
 pub struct StreamedRequest<TItem: Send + Sync + 'static + Clone> {
@@ -11,17 +13,22 @@ impl<TItem: Send + Sync + 'static + Clone> StreamedRequest<TItem> {
     pub fn new_as_vec(data: Vec<TItem>) -> Self {
         Self {
             inner: Arc::new(StreamedRequestInner::AsVec(data)),
-            channel_size: 1000,
+            channel_size: 1024,
         }
     }
 
-    pub fn new_as_stream(data: Vec<TItem>) -> Self {
+    pub fn new_as_stream() -> Self {
+        let inner = StreamedRequestInner::AsStream(Mutex::new(RequestAsStream::default()));
         Self {
-            inner: Arc::new(StreamedRequestInner::AsVec(data)),
-            channel_size: 1000,
+            inner: Arc::new(inner),
+            channel_size: 1024,
         }
     }
 
+    pub fn set_channel_size(mut self, value: usize) -> Self {
+        self.channel_size = value;
+        self
+    }
     pub fn get_producer(&self) -> StreamedRequestProducer<TItem> {
         StreamedRequestProducer {
             inner: self.inner.clone(),

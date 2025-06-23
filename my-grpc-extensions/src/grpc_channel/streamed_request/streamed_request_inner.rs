@@ -1,9 +1,20 @@
 use tokio::sync::Mutex;
 
-pub struct RequestAsStream<TItem: Clone> {
-    items: Vec<TItem>,
-    has_end_of_stream: bool,
-    sender: Option<tokio::sync::mpsc::Sender<TItem>>,
+pub enum RequestAsStream<TItem: Clone> {
+    NotInitialized {
+        items: Vec<TItem>,
+        has_end_of_stream: bool,
+    },
+    Initialized(Option<tokio::sync::mpsc::Sender<TItem>>),
+}
+
+impl<TItem: Clone> Default for RequestAsStream<TItem> {
+    fn default() -> Self {
+        Self::NotInitialized {
+            items: vec![],
+            has_end_of_stream: false,
+        }
+    }
 }
 
 pub enum StreamedRequestInner<TItem: Clone> {
@@ -20,17 +31,31 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
             StreamedRequestInner::AsStream(inner) => {
                 let mut write_access = inner.lock().await;
 
-                if write_access.has_end_of_stream {
-                    panic!("Can not send message when end of stream is initiated");
-                }
-                write_access.items.push(item.clone());
-                if let Some(sender) = write_access.sender.as_ref() {
-                    let err = sender.send(item).await;
-
-                    if let Err(err) = err {
-                        println!("Can not send grpc item to stream #3. Err: {}", err);
-                        return;
+                match &mut *write_access {
+                    RequestAsStream::NotInitialized {
+                        items,
+                        has_end_of_stream,
+                    } => {
+                        if *has_end_of_stream {
+                            println!("StreamedRequestInner is ended");
+                            panic!("StreamedRequestInner is ended");
+                        }
+                        items.push(item);
                     }
+                    RequestAsStream::Initialized(sender) => match sender {
+                        Some(sender) => {
+                            let err = sender.send(item).await;
+
+                            if let Err(err) = err {
+                                println!("Can not send grpc item to stream #1. Err: {}", err);
+                                return;
+                            }
+                        }
+                        None => {
+                            println!("StreamedRequestInner is ended");
+                            panic!("StreamedRequestInner is ended");
+                        }
+                    },
                 }
             }
         }
@@ -51,19 +76,28 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
             StreamedRequestInner::AsStream(mutex) => {
                 let mut write_access = mutex.lock().await;
 
-                if let Some(sender) = write_access.sender.as_ref() {
-                    for itm in write_access.items.iter() {
-                        let err = sender.send(itm.clone()).await;
-                        if let Err(err) = err {
-                            println!("Can not send grpc item to stream #2. Err: {}", err);
+                match &mut *write_access {
+                    RequestAsStream::NotInitialized {
+                        items,
+                        has_end_of_stream,
+                    } => {
+                        for itm in items.drain(..) {
+                            let err = sender.send(itm.clone()).await;
+                            if let Err(err) = err {
+                                println!("Can not send grpc item to stream #2. Err: {}", err);
+                                return;
+                            }
+                        }
+                        if *has_end_of_stream {
                             return;
                         }
                     }
+                    RequestAsStream::Initialized(_) => {
+                        panic!("Somehow stream is set for a second time")
+                    }
                 }
 
-                if !write_access.has_end_of_stream {
-                    write_access.sender = Some(sender);
-                }
+                *write_access = RequestAsStream::Initialized(Some(sender));
             }
         }
     }
@@ -73,8 +107,14 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
             StreamedRequestInner::AsVec(_) => {}
             StreamedRequestInner::AsStream(items) => {
                 let mut write_access = items.lock().await;
-                write_access.has_end_of_stream = true;
-                write_access.sender.take();
+                match &mut *write_access {
+                    RequestAsStream::NotInitialized {
+                        has_end_of_stream, ..
+                    } => *has_end_of_stream = true,
+                    RequestAsStream::Initialized(sender) => {
+                        sender.take();
+                    }
+                }
             }
         }
     }
