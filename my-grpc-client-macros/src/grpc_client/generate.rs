@@ -146,7 +146,18 @@ pub fn generate(
         }
 
         async fn ping(&self, mut service: TGrpcService) {
-           service.ping(()).await.unwrap();
+  
+            let result = service.ping(()).await;
+
+            if let Err(err) = result {
+                println!(
+                    "{} ping Error. {:?}",
+                    SttElevenLabsGrpcClient::get_service_name(),
+                    err
+                );
+
+                panic!("{}", err);
+            }
         }
       }
 
