@@ -152,7 +152,7 @@ pub fn generate(
             if let Err(err) = result {
                 println!(
                     "{} ping Error. {:?}",
-                    SttElevenLabsGrpcClient::get_service_name(),
+                    self.get_service_name(),
                     err
                 );
 
