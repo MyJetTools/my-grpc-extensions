@@ -2,7 +2,6 @@
 
 use std::str::FromStr;
 
-use proc_macro::TokenStream;
 use types_reader::TokensObject;
 
 
@@ -11,8 +10,8 @@ use crate::grpc_client::{fn_override::FnOverride, proto_file_reader::into_snake_
 use super::proto_file_reader::ProtoServiceDescription;
 
 pub fn generate(
-    attr: TokenStream,
-    input: TokenStream,
+    attr: proc_macro::TokenStream,
+    input: proc_macro::TokenStream,
     with_telemetry: bool,
     with_ssh: bool,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
@@ -129,16 +128,18 @@ pub fn generate(
         (quote::quote!(), quote::quote!())
     };
 
+    let grpc_service_factory_name = proc_macro2::TokenStream::from_str(format!("{}GrpcServiceFactory", struct_name.to_string()).as_str()).unwrap() ;
+
     Ok(quote::quote! {
 
         #(#use_name_spaces;)*
 
         type TGrpcService = #t_grpc_service;
 
-        struct MyGrpcServiceFactory;
+        struct #grpc_service_factory_name;
 
         #[async_trait::async_trait]
-        impl my_grpc_extensions::GrpcServiceFactory<TGrpcService> for MyGrpcServiceFactory {
+        impl my_grpc_extensions::GrpcServiceFactory<TGrpcService> for #grpc_service_factory_name {
          #fn_create_service
 
         fn get_service_name(&self) -> &'static str {
@@ -172,7 +173,7 @@ pub fn generate(
                 settings: settings.clone(),
                 channel: my_grpc_extensions::GrpcChannelPool::new(
                     settings,
-                    std::sync::Arc::new(MyGrpcServiceFactory),
+                    std::sync::Arc::new(#grpc_service_factory_name),
                     std::time::Duration::from_secs(#timeout_sec),
                     std::time::Duration::from_secs(#ping_timeout_sec),
                     std::time::Duration::from_secs(#ping_interval_sec),
