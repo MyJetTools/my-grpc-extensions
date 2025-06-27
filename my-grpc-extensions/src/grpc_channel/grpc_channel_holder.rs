@@ -194,11 +194,14 @@ impl GrpcChannelHolder {
             let end_point = Channel::from_shared(connect_url.get_grpc_host().to_string());
 
             if let Err(err) = end_point {
-                panic!(
+                let msg = format!(
                     "Failed to create channel with url:{}. Err: {:?}",
                     connect_url.as_str(),
                     err
-                )
+                );
+
+                println!("{}", msg);
+                panic!("{}", msg)
             }
 
             #[cfg(feature = "with-tls")]
