@@ -1,4 +1,5 @@
-#[derive(Debug)]
+use std::fmt::Debug;
+
 pub enum GrpcConnectUrl {
     Tcp {
         raw: String,
@@ -7,6 +8,16 @@ pub enum GrpcConnectUrl {
     },
     UnixSocket(String),
 }
+
+impl Debug for GrpcConnectUrl {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Tcp { raw, over_ssh: _ } => f.debug_struct("Tcp").field("raw", raw).finish(),
+            Self::UnixSocket(arg0) => f.debug_tuple("UnixSocket").field(arg0).finish(),
+        }
+    }
+}
+
 impl GrpcConnectUrl {
     fn new_as_tcp(raw: String) -> Self {
         Self::Tcp {
