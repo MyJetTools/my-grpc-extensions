@@ -66,6 +66,8 @@ impl GrpcChannelHolder {
 
         use hyper::Uri;
 
+        println!("Creating unix socket channel: {}", unix_socket_path);
+
         let uri = Uri::from_str(format!("http://unix.socket{}", unix_socket_path).as_str());
 
         if uri.is_err() {
