@@ -85,9 +85,15 @@ impl GrpcChannelHolder {
                 // Connect to a Uds socket
                 Ok::<_, std::io::Error>(hyper_util::rt::TokioIo::new(unix_stream))
             }))
-            .await?;
+            .await;
 
-        Ok(channel)
+        match channel {
+            Ok(channel) => return Ok(channel),
+            Err(err) => {
+                println!("Can not create channel: {}", err);
+                Err(err.into())
+            }
+        }
     }
 
     #[cfg(unix)]
