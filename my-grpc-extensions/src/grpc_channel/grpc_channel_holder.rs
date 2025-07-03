@@ -150,6 +150,8 @@ impl GrpcChannelHolder {
     ) -> Result<Channel, GrpcReadError> {
         let connect_url = connect_url.into();
 
+        println!("Connecting GRPC to {:?}", connect_url);
+
         #[cfg(unix)]
         if connect_url.is_unix_socket() {
             return self

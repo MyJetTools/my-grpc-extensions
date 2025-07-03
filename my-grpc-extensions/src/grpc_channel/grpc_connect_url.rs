@@ -1,3 +1,4 @@
+#[derive(Debug)]
 pub enum GrpcConnectUrl {
     Tcp {
         raw: String,
