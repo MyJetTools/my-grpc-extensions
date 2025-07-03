@@ -105,6 +105,7 @@ impl GrpcChannelHolder {
     ) -> Result<Channel, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
+            println!("Creating unix_socket {}", connect_url);
             let feature = Self::create_unix_socket_channel(connect_url.to_string(), service_name);
 
             match tokio::time::timeout(request_timeout, feature).await {
@@ -148,12 +149,13 @@ impl GrpcChannelHolder {
         request_timeout: Duration,
         #[cfg(feature = "with-ssh")] ssh_target: crate::ssh::SshTargetInner,
     ) -> Result<Channel, GrpcReadError> {
-        let connect_url = connect_url.into();
+        let connect_url: GrpcConnectUrl = connect_url.into();
 
         println!("Connecting GRPC to {:?}", connect_url);
 
         #[cfg(unix)]
         if connect_url.is_unix_socket() {
+            println!("Connecting as UnixSocket");
             return self
                 .connect_to_unix_socket(
                     connect_url.get_grpc_host().to_string(),
