@@ -49,6 +49,8 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
             .get_grpc_url(self.service_factory.get_service_name())
             .await;
 
+        println!("GrpcConnectUrl: {:?}", settings);
+
         return settings.url.into();
     }
 

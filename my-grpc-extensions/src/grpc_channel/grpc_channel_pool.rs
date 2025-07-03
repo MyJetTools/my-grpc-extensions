@@ -22,6 +22,7 @@ pub trait GrpcClientSettings {
     async fn get_grpc_url(&self, name: &'static str) -> GrpcUrl;
 }
 
+#[derive(Debug)]
 pub struct GrpcUrl {
     pub url: String,
     pub host_metadata: Option<String>,
