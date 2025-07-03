@@ -12,7 +12,11 @@ pub enum GrpcConnectUrl {
 impl Debug for GrpcConnectUrl {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Tcp { raw, over_ssh: _ } => f.debug_struct("Tcp").field("raw", raw).finish(),
+            Self::Tcp {
+                raw,
+                #[cfg(feature = "with-ssh")]
+                over_ssh,
+            } => f.debug_struct("Tcp").field("raw", raw).finish(),
             Self::UnixSocket(arg0) => f.debug_tuple("UnixSocket").field(arg0).finish(),
         }
     }
