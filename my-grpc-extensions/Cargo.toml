@@ -12,7 +12,7 @@ with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
 with-tls = ["my-tls"]
-with-unix-socket = ["tower/util"]
+
 with-ssh = ["my-ssh", "my-grpc-client-macros?/with-ssh"]
 
 
@@ -38,7 +38,7 @@ futures-util = "*"
 tokio-stream = "*"
 futures = "*"
 async-trait = "*"
-tower = { version = "*" }
+tower = { version = "*", features = ["util"] }
 my-ssh = { tag = "0.1.2", git = "https://github.com/MyJetTools/my-ssh.git", optional = true }
 my-grpc-client-macros = { optional = true, path = "../my-grpc-client-macros" }
 my-grpc-server-macros = { optional = true, path = "../my-grpc-server-macros" }

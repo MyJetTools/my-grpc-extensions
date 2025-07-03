@@ -57,7 +57,7 @@ impl GrpcChannelHolder {
         }
     }
 
-    #[cfg(feature = "with-unix-socket")]
+    #[cfg(unix)]
     async fn create_unix_socket_channel(
         unix_socket_path: String,
         service_name: &'static str,
@@ -90,7 +90,7 @@ impl GrpcChannelHolder {
         Ok(channel)
     }
 
-    #[cfg(feature = "with-unix-socket")]
+    #[cfg(unix)]
     async fn connect_to_unix_socket(
         &self,
         connect_url: String,
@@ -144,7 +144,7 @@ impl GrpcChannelHolder {
     ) -> Result<Channel, GrpcReadError> {
         let connect_url = connect_url.into();
 
-        #[cfg(feature = "with-unix-socket")]
+        #[cfg(unix)]
         if connect_url.is_unix_socket() {
             return self
                 .connect_to_unix_socket(

@@ -23,7 +23,6 @@ Supported features
 
 
 Plug features:
-* with-unix-socket
 * with-ssh
 
 Plugging to SSH leverages on the library: 
@@ -37,7 +36,6 @@ Why unix sockets Are needed - port forward through SSH connection
 ```toml
 my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
     "grpc-client",
-    "with-unix-socket",
     "with-ssh",
 ] }
 

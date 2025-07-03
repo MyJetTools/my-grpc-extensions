@@ -4,7 +4,6 @@ pub enum GrpcConnectUrl {
         #[cfg(feature = "with-ssh")]
         over_ssh: my_ssh::ssh_settings::OverSshConnectionSettings,
     },
-    #[cfg(feature = "with-unix-socket")]
     UnixSocket(String),
 }
 impl GrpcConnectUrl {
@@ -15,7 +14,8 @@ impl GrpcConnectUrl {
             raw,
         }
     }
-    #[cfg(feature = "with-unix-socket")]
+
+    #[cfg(unix)]
     fn new_as_unix_socket(raw: String) -> Self {
         Self::Tcp {
             #[cfg(feature = "with-ssh")]
@@ -28,7 +28,6 @@ impl GrpcConnectUrl {
     pub fn get_grpc_host(&self) -> &str {
         match self {
             Self::Tcp { raw } => raw.as_str(),
-            #[cfg(feature = "with-unix-socket")]
             Self::UnixSocket(raw) => &raw,
         }
     }
@@ -37,7 +36,7 @@ impl GrpcConnectUrl {
     pub fn get_grpc_host(&self) -> &str {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.remote_resource_string.as_str(),
-            #[cfg(feature = "with-unix-socket")]
+
             Self::UnixSocket(raw) => &raw,
         }
     }
@@ -45,7 +44,6 @@ impl GrpcConnectUrl {
     pub fn get_ssh_credentials(&self) -> Option<&std::sync::Arc<my_ssh::SshCredentials>> {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.ssh_credentials.as_ref(),
-            #[cfg(feature = "with-unix-socket")]
             Self::UnixSocket(raw) => {
                 panic!("Unix socket does not support ssh credentials: {}", raw)
             }
@@ -56,7 +54,6 @@ impl GrpcConnectUrl {
     pub fn is_over_ssh(&self) -> bool {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.ssh_credentials.is_some(),
-            #[cfg(feature = "with-unix-socket")]
             Self::UnixSocket(_) => false,
         }
     }
@@ -64,7 +61,6 @@ impl GrpcConnectUrl {
     pub fn as_str(&self) -> &str {
         match self {
             Self::Tcp { raw, .. } => raw,
-            #[cfg(feature = "with-unix-socket")]
             Self::UnixSocket(raw) => raw,
         }
     }
@@ -74,23 +70,28 @@ impl GrpcConnectUrl {
         rust_extensions::str_utils::starts_with_case_insensitive(grpc_host, "https")
     }
 
-    #[cfg(feature = "with-unix-socket")]
+    #[cfg(unix)]
     pub fn is_unix_socket(&self) -> bool {
         match self {
             Self::UnixSocket(_) => true,
             _ => false,
         }
     }
+
+    #[cfg(not(unix))]
+    pub fn is_unix_socket(&self) -> bool {
+        false
+    }
 }
 
 impl Into<GrpcConnectUrl> for String {
     fn into(self) -> GrpcConnectUrl {
         if self.starts_with("/") || self.starts_with("~/") {
-            #[cfg(feature = "with-unix-socket")]
+            #[cfg(unix)]
             return GrpcConnectUrl::new_as_unix_socket(self);
 
-            #[cfg(not(feature = "with-unix-socket"))]
-            panic!("Detected Unix socket [{}] which is not supported. Please enable feature with-unix-socket", self);
+            #[cfg(not(unix))]
+            panic!("Detected Unix socket [{}] is not supported.", self);
         }
 
         GrpcConnectUrl::new_as_tcp(self)
