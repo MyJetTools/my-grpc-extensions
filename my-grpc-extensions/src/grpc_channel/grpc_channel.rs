@@ -104,7 +104,6 @@ impl<TService: Send + Sync + 'static> GrpcChannel<TService> {
         #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
     ) -> Result<TService, GrpcReadError> {
         let channel = self.get_channel().await?;
-        println!("Channel Created");
         let result = self.service_factory.create_service(
             channel,
             #[cfg(feature = "with-telemetry")]
