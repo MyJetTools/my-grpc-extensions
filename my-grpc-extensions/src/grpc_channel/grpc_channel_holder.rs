@@ -62,13 +62,11 @@ impl GrpcChannelHolder {
         unix_socket_path: String,
         service_name: &'static str,
     ) -> Result<Channel, GrpcReadError> {
+        use std::str::FromStr;
+
         use hyper::Uri;
 
-        let uri = Uri::builder()
-            .scheme("http")
-            .authority("unix.socket")
-            .path_and_query(unix_socket_path.as_str())
-            .build();
+        let uri = Uri::from_str(format!("http://unix.socket{}", unix_socket_path).as_str());
 
         if uri.is_err() {
             panic!(
@@ -79,7 +77,7 @@ impl GrpcChannelHolder {
 
         let channel = Channel::builder(uri.unwrap())
             .connect_with_connector(tower::service_fn(|uri: Uri| async move {
-                let unix_socket_path = uri.path_and_query().unwrap().as_str();
+                let unix_socket_path = uri.path();
                 println!("Grpc Client connecting to {}", unix_socket_path);
                 let unix_stream = tokio::net::UnixStream::connect(unix_socket_path).await?;
                 // Connect to a Uds socket
