@@ -2,7 +2,7 @@ use std::{pin::Pin, time::Duration};
 
 use tokio::sync::mpsc::Sender;
 
-use crate::grpc_server::SendStream;
+use crate::grpc_server_streams::SendStream;
 
 pub struct GrpcServerStreamResult<TModel: Send + Sync + 'static> {
     tx: Sender<Result<TModel, tonic::Status>>,
