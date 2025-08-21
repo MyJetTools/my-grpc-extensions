@@ -1,6 +1,6 @@
 [package]
 name = "my-grpc-extensions"
-version = "0.6.5"
+version = "0.6.6"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -31,7 +31,7 @@ lazy_static = "*"
 
 my-tls = { tag = "0.1.5", git = "https://github.com/MyJetTools/my-tls.git", optional = true }
 tokio = { version = "*" }
-tonic = { version = "0.13" }
+tonic = { version = "*" }
 hyper = { version = "*" }
 hyper-util = { version = "*", features = ["tokio"] }
 futures-util = "*"

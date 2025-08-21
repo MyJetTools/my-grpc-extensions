@@ -17,11 +17,11 @@ impl ProtoRpc {
         proc_macro2::TokenStream::from_str(&into_snake_case(self.name.as_str())).unwrap()
     }
 
-    pub fn get_input_param(&self) -> Option<ParamType> {
+    pub fn get_input_param<'s>(&'s self) -> Option<ParamType<'s>> {
         ParamType::parse(&self.input_param)
     }
 
-    pub fn get_output_param(&self) -> Option<ParamType> {
+    pub fn get_output_param<'s>(&'s self) -> Option<ParamType<'s>> {
         ParamType::parse(&self.output_param)
     }
 }
