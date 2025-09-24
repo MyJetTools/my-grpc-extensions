@@ -4,10 +4,10 @@ use futures_util::StreamExt;
 
 use crate::GrpcReadError;
 
-pub async fn as_vec<T>(
+pub async fn as_vec<T, TDest: From<T>>(
     mut stream_to_read: tonic::Streaming<T>,
     timeout: Duration,
-) -> Result<Vec<T>, GrpcReadError> {
+) -> Result<Vec<TDest>, GrpcReadError> {
     let mut result = Vec::new();
 
     loop {
@@ -16,7 +16,7 @@ pub async fn as_vec<T>(
         match response {
             Some(item) => match item {
                 Ok(item) => {
-                    result.push(item);
+                    result.push(item.into());
                 }
                 Err(err) => Err(GrpcReadError::TonicStatus(err))?,
             },

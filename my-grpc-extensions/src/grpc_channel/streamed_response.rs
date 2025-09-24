@@ -7,12 +7,12 @@ pub struct StreamedResponse<TItem> {
     time_out: Duration,
 }
 
-impl<TResponse> StreamedResponse<TResponse> {
-    pub fn new(stream: tonic::Streaming<TResponse>, time_out: Duration) -> Self {
+impl<TItem> StreamedResponse<TItem> {
+    pub fn new(stream: tonic::Streaming<TItem>, time_out: Duration) -> Self {
         Self { stream, time_out }
     }
 
-    pub async fn into_vec(self) -> Result<Vec<TResponse>, GrpcReadError> {
+    pub async fn into_vec<TDest: From<TItem>>(self) -> Result<Vec<TItem>, GrpcReadError> {
         crate::read_grpc_stream::as_vec(self.stream, self.time_out).await
     }
 
@@ -24,25 +24,26 @@ impl<TResponse> StreamedResponse<TResponse> {
         self.time_out
     }
 
+    #[deprecated("Please use into_vec and trait From to convert items")]
     pub async fn into_vec_with_transformation<TDest>(
         self,
-        transform: impl Fn(TResponse) -> TDest,
+        transform: impl Fn(TItem) -> TDest,
     ) -> Result<Vec<TDest>, GrpcReadError> {
         crate::read_grpc_stream::as_vec_with_transformation(self.stream, self.time_out, &transform)
             .await
     }
 
-    pub async fn into_has_map<TKey, TGetKey: Fn(TResponse) -> (TKey, TResponse)>(
+    pub async fn into_has_map<TKey, TGetKey: Fn(TItem) -> (TKey, TItem)>(
         self,
         get_key: TGetKey,
-    ) -> Result<HashMap<TKey, TResponse>, GrpcReadError>
+    ) -> Result<HashMap<TKey, TItem>, GrpcReadError>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
         crate::read_grpc_stream::as_hash_map(self.stream, &get_key, self.time_out).await
     }
 
-    pub async fn get_next_item(&mut self) -> Option<tonic::Result<TResponse>> {
+    pub async fn get_next_item(&mut self) -> Option<tonic::Result<TItem>> {
         use futures_util::StreamExt;
         let future = self.stream.next();
 
