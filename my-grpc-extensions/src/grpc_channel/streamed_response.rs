@@ -15,7 +15,7 @@ impl<TItem> StreamedResponse<TItem> {
         Self { stream, time_out }
     }
 
-    pub async fn into_vec<TDest: From<TItem>>(self) -> Result<Vec<TItem>, GrpcReadError> {
+    pub async fn into_vec<TResult: From<TItem>>(self) -> Result<Vec<TResult>, GrpcReadError> {
         crate::read_grpc_stream::as_vec(self.stream, self.time_out).await
     }
 
