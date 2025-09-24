@@ -36,24 +36,24 @@ impl<TItem> StreamedResponse<TItem> {
             .await
     }
 
-    pub async fn into_has_map<TKey, TGetKey: Fn(TItem) -> (TKey, TItem)>(
+    pub async fn into_has_map<TResult, TKey, TGetKey>(
         self,
-        get_key: TGetKey,
-    ) -> Result<HashMap<TKey, TItem>, GrpcReadError>
+        get_key: &impl Fn(TItem) -> (TKey, TResult),
+    ) -> Result<HashMap<TKey, TResult>, GrpcReadError>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
-        crate::read_grpc_stream::as_hash_map(self.stream, &get_key, self.time_out).await
+        crate::read_grpc_stream::as_hash_map(self.stream, get_key, self.time_out).await
     }
 
-    pub async fn into_b_tree_map<TKey, TGetKey: Fn(TItem) -> (TKey, TItem)>(
+    pub async fn into_b_tree_map<TResult, TKey, TGetKey>(
         self,
-        get_key: TGetKey,
-    ) -> Result<BTreeMap<TKey, TItem>, GrpcReadError>
+        get_key: &impl Fn(TItem) -> (TKey, TResult),
+    ) -> Result<BTreeMap<TKey, TResult>, GrpcReadError>
     where
         TKey: Ord + core::hash::Hash + Clone,
     {
-        crate::read_grpc_stream::as_b_tree_map(self.stream, &get_key, self.time_out).await
+        crate::read_grpc_stream::as_b_tree_map(self.stream, get_key, self.time_out).await
     }
 
     pub async fn get_next_item(&mut self) -> Option<tonic::Result<TItem>> {

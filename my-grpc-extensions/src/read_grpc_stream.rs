@@ -30,11 +30,11 @@ pub async fn as_vec<T, TDest: From<T>>(
     }
 }
 
-pub async fn as_hash_map<TSrc, TKey, TValue, TGetKey: Fn(TSrc) -> (TKey, TValue)>(
+pub async fn as_hash_map<TResult, TSrc, TKey>(
     mut stream_to_read: tonic::Streaming<TSrc>,
-    get_key: &TGetKey,
+    get_key: &impl Fn(TSrc) -> (TKey, TResult),
     timeout: Duration,
-) -> Result<HashMap<TKey, TValue>, GrpcReadError>
+) -> Result<HashMap<TKey, TResult>, GrpcReadError>
 where
     TKey: std::cmp::Eq + core::hash::Hash + Clone,
 {
@@ -58,13 +58,13 @@ where
     }
 }
 
-pub async fn as_b_tree_map<TSrc, TKey: Ord, TValue, TGetKey: Fn(TSrc) -> (TKey, TValue)>(
+pub async fn as_b_tree_map<TResult, TSrc, TKey>(
     mut stream_to_read: tonic::Streaming<TSrc>,
-    get_key: &TGetKey,
+    get_key: &impl Fn(TSrc) -> (TKey, TResult),
     timeout: Duration,
-) -> Result<BTreeMap<TKey, TValue>, GrpcReadError>
+) -> Result<BTreeMap<TKey, TResult>, GrpcReadError>
 where
-    TKey: core::hash::Hash + Clone,
+    TKey: core::hash::Hash + Ord + Clone,
 {
     let mut result = BTreeMap::new();
 
