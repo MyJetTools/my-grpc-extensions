@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    time::Duration,
+};
 
 use crate::GrpcReadError;
 
@@ -24,7 +27,7 @@ impl<TItem> StreamedResponse<TItem> {
         self.time_out
     }
 
-    #[deprecated("Please use into_vec and trait From to convert items")]
+    #[deprecated(note = "Please use into_vec and trait From to convert items")]
     pub async fn into_vec_with_transformation<TDest>(
         self,
         transform: impl Fn(TItem) -> TDest,
@@ -41,6 +44,16 @@ impl<TItem> StreamedResponse<TItem> {
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
         crate::read_grpc_stream::as_hash_map(self.stream, &get_key, self.time_out).await
+    }
+
+    pub async fn into_b_tree_map<TKey, TGetKey: Fn(TItem) -> (TKey, TItem)>(
+        self,
+        get_key: TGetKey,
+    ) -> Result<BTreeMap<TKey, TItem>, GrpcReadError>
+    where
+        TKey: Ord + core::hash::Hash + Clone,
+    {
+        crate::read_grpc_stream::as_b_tree_map(self.stream, &get_key, self.time_out).await
     }
 
     pub async fn get_next_item(&mut self) -> Option<tonic::Result<TItem>> {

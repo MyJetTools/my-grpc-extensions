@@ -1,4 +1,7 @@
-use std::{collections::HashMap, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    time::Duration,
+};
 
 use futures_util::StreamExt;
 
@@ -36,6 +39,34 @@ where
     TKey: std::cmp::Eq + core::hash::Hash + Clone,
 {
     let mut result = HashMap::new();
+
+    loop {
+        let response = tokio::time::timeout(timeout, stream_to_read.next()).await?;
+
+        match response {
+            Some(item) => match item {
+                Ok(item) => {
+                    let (key, value) = get_key(item);
+                    result.insert(key, value);
+                }
+                Err(err) => Err(GrpcReadError::TonicStatus(err))?,
+            },
+            None => {
+                return Ok(result);
+            }
+        }
+    }
+}
+
+pub async fn as_b_tree_map<TSrc, TKey: Ord, TValue, TGetKey: Fn(TSrc) -> (TKey, TValue)>(
+    mut stream_to_read: tonic::Streaming<TSrc>,
+    get_key: &TGetKey,
+    timeout: Duration,
+) -> Result<BTreeMap<TKey, TValue>, GrpcReadError>
+where
+    TKey: core::hash::Hash + Clone,
+{
+    let mut result = BTreeMap::new();
 
     loop {
         let response = tokio::time::timeout(timeout, stream_to_read.next()).await?;
