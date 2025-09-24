@@ -32,7 +32,7 @@ pub async fn as_vec<T, TDest: From<T>>(
 
 pub async fn as_hash_map<TResult, TSrc, TKey>(
     mut stream_to_read: tonic::Streaming<TSrc>,
-    get_key: &impl Fn(TSrc) -> (TKey, TResult),
+    get_key: impl Fn(TSrc) -> (TKey, TResult),
     timeout: Duration,
 ) -> Result<HashMap<TKey, TResult>, GrpcReadError>
 where
@@ -60,7 +60,7 @@ where
 
 pub async fn as_b_tree_map<TResult, TSrc, TKey>(
     mut stream_to_read: tonic::Streaming<TSrc>,
-    get_key: &impl Fn(TSrc) -> (TKey, TResult),
+    get_key: impl Fn(TSrc) -> (TKey, TResult),
     timeout: Duration,
 ) -> Result<BTreeMap<TKey, TResult>, GrpcReadError>
 where

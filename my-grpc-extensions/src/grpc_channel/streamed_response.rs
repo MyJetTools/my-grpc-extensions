@@ -36,9 +36,9 @@ impl<TItem> StreamedResponse<TItem> {
             .await
     }
 
-    pub async fn into_has_map<TResult, TKey, TGetKey>(
+    pub async fn into_has_map<TResult, TKey>(
         self,
-        get_key: &impl Fn(TItem) -> (TKey, TResult),
+        get_key: impl Fn(TItem) -> (TKey, TResult),
     ) -> Result<HashMap<TKey, TResult>, GrpcReadError>
     where
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
@@ -46,9 +46,9 @@ impl<TItem> StreamedResponse<TItem> {
         crate::read_grpc_stream::as_hash_map(self.stream, get_key, self.time_out).await
     }
 
-    pub async fn into_b_tree_map<TResult, TKey, TGetKey>(
+    pub async fn into_b_tree_map<TResult, TKey>(
         self,
-        get_key: &impl Fn(TItem) -> (TKey, TResult),
+        get_key: impl Fn(TItem) -> (TKey, TResult),
     ) -> Result<BTreeMap<TKey, TResult>, GrpcReadError>
     where
         TKey: Ord + core::hash::Hash + Clone,
