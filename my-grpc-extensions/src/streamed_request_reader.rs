@@ -35,12 +35,12 @@ impl<TItem> StreamedRequestReader<TItem> {
         result.unwrap()
     }
 
-    pub async fn into_vec(mut self) -> tonic::Result<Vec<TItem>> {
+    pub async fn into_vec<TResult: From<TItem>>(mut self) -> tonic::Result<Vec<TResult>> {
         let mut result = Vec::new();
 
         while let Some(item) = self.get_next().await {
             let item = item?;
-            result.push(item);
+            result.push(item.into());
         }
 
         Ok(result)
