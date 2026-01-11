@@ -107,6 +107,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         let ssh_target = self.ssh_target.clone();
         let enable_ping = self.enable_ping.clone();
         let ping_interval = self.ping_interval;
+        let ping_timeout = self.ping_timeout;
         let grpc_channel_holder = self.grpc_channel_holder.clone();
         let grpc_client_settings = self.get_grpc_address.clone();
         let grpc_service_factory = self.service_factory.clone();
@@ -116,6 +117,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             ssh_target,
             enable_ping,
             ping_interval,
+            ping_timeout,
             request_timeout,
             grpc_channel_holder,
             grpc_client_settings,
@@ -162,6 +164,7 @@ async fn ping_loop<TService: Send + Sync + 'static>(
     #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
     enable_ping: Arc<UnsafeValue<bool>>,
     ping_interval: Duration,
+    ping_timeout: Duration,
     request_timeout: Duration,
     grpc_channel_holder: Arc<GrpcChannelHolder>,
     grpc_client_settings: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
@@ -193,7 +196,7 @@ async fn ping_loop<TService: Send + Sync + 'static>(
 
                 let result = tokio::spawn(execute_ping_with_timeout(
                     grpc_service_factory.clone(),
-                    request_timeout,
+                    ping_timeout,
                     service,
                 ))
                 .await;

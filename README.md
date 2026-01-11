@@ -1,70 +1,114 @@
 # my-grpc-extensions
 
-Example of usage
+Utilities and proc-macros that simplify building gRPC clients and servers on top of `tonic`. It provides connection pooling, retry-aware request builders, streaming helpers, optional telemetry propagation, SSH tunneling, and TLS integration.
 
+## Crates in this workspace
+- `my-grpc-extensions` – core helpers (channels, request builders with retries/background ping, streaming utilities, telemetry hooks, SSH/TLS support).
+- `my-grpc-client-macros` – `#[generate_grpc_client]` macro that builds strongly typed clients from your `.proto` with configurable retries/timeouts and optional per-method overrides.
+- `my-grpc-server-macros` – server-side macros (e.g., `#[with_telemetry]`) that inject telemetry context before you handle the request and helpers to send collections/streams.
 
-```rust
+## Install
+Add from Git with the features you need:
+
+```toml
+[dependencies]
 my-grpc-extensions = { tag = "x.x.x", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
-    "grpc-client",
-    "with-telemetry",
+    "grpc-client",     # enable client macro re-exports
+    "grpc-server",     # enable server macro re-exports
+    "with-telemetry",  # pass telemetry context through metadata/remote addr
 ] }
-
 ```
 
+Feature flags:
+- `grpc-client` – re-export `my-grpc-client-macros`.
+- `grpc-server` – re-export `my-grpc-server-macros`.
+- `with-telemetry` – enables telemetry extraction/injection (requires `my-telemetry`).
+- `with-ssh` – connect through SSH port-forwarding using `my-ssh`.
+- `with-tls` – enable TLS support via `my-tls`.
+- `adjust-server-stream` – customize gRPC server stream channel size/send timeout.
 
-Supported features
-* grpc-client - gives ability to use client macros;
-* grpc-server - gives ability to use server macros;
-* with-telemetry - gives ability to work with telemetry;
+## Client macro quickstart
 
+```rust
+use my_grpc_client_macros::generate_grpc_client;
 
+#[generate_grpc_client(
+    proto_file: "./proto/KeyValueFlows.proto",
+    crate_ns: "crate::keyvalue_grpc",
+    retries: 3,
+    request_timeout_sec: 5,
+    ping_timeout_sec: 5,
+    ping_interval_sec: 5,
+    overrides: [{ fn_name: "Get", retries: 2 }],
+)]
+pub struct KeyValueGrpcClient;
+```
 
-### Connecting to GRPC server via SSH
+Parameters:
+- `proto_file` – path to your proto file; `crate_ns` – module where tonic-generated code lives.
+- `retries` – reconnect/retry attempts on disconnect; `request_timeout_sec` – per-request timeout.
+- `ping_timeout_sec` / `ping_interval_sec` – background ping used to detect drops and reconnect.
+- `overrides` – per-method retry/timeouts if needed.
 
+Implement `GrpcClientSettings` to provide service URLs:
 
-Plug features:
-* with-ssh
+```rust
+#[async_trait::async_trait]
+impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
+    async fn get_grpc_url(&self, name: &'static str) -> String {
+        if name == KeyValueGrpcClient::get_service_name() {
+            let read = self.settings.read().await;
+            return read.key_value_grpc_url.clone();
+        }
+        panic!("Unknown grpc service name: {}", name)
+    }
+}
+```
 
-Plugging to SSH leverages on the library: 
+## Server macro quickstart
 
-And you can use it: https://github.com/MyJetTools/my-ssh
+Wrap handlers with telemetry:
 
-Why unix sockets Are needed - port forward through SSH connection
+```rust
+#[with_telemetry]
+async fn get(
+    &self,
+    request: tonic::Request<GetDocumentsRequest>,
+) -> Result<tonic::Response<Self::GetStream>, tonic::Status> {
+    let request = request.into_inner(); // telemetry is injected before this line
+    let result = crate::flows::get_docs(&self.app, request.client_id, request.doc_ids, my_telemetry).await;
+    my_grpc_extensions::grpc_server::send_vec_to_stream(result, |dto| dto).await
+}
+```
 
+Streaming helpers (server):
+- `send_single_item_to_stream`, `send_from_iterator`, `create_empty_stream`.
+- Enable `adjust-server-stream` to configure channel size and send timeouts.
 
-#### Cargo.toml
+## Connecting to gRPC over SSH
+
+Enable `with-ssh` and configure credentials/pool from `my-ssh`:
+
 ```toml
-my-grpc-extensions = { tag = "get_tag_from_github", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
+my-grpc-extensions = { tag = "x.x.x", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
     "grpc-client",
     "with-ssh",
 ] }
-
 ```
 
-#### main.rs
 ```rust
+let grpc_settings = GrpcLogSettings::new(over_ssh_connection.remote_resource_string);
+let grpc_client = MyLoggerGrpcClient::new(Arc::new(grpc_settings));
 
-    // Here we specify settings behind SSH connection. For instance: http://10.0.0.1:5051 
-    //  which means we connecting to remote network 10.0.0.0/24 behind SSH connection.
-    let grpc_settings = GrpcLogSettings::new(over_ssh_connection.remote_resource_string);
+let ssh_credentials = my_grpc_extensions::my_ssh::SshCredentials::SshAgent {
+    ssh_remote_host: "ssh_host".to_string(),
+    ssh_remote_port: 22,
+    ssh_user_name: "user".to_string(),
+};
 
-    let grpc_client = MyLoggerGrpcClient::new(Arc::new(grpc_settings));
-
-
-    //part of my_ssh library
-    let ssh_credentials = my_grpc_extensions::my_ssh::SshCredentials::SshAgent{
-        ssh_remote_host: "ssh_host".to_string(),
-        ssh_remote_port: 22,
-        ssh_user_name: "user".to_string(),
-    };
-
-   //Enabling SSH connection
-    grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
-
-    // If we plug the pool - connection is not going to be closed after each request;
-    grpc_client
-            .set_ssh_sessions_pool(ssh_sessions_pool.clone())
-            .await;
-
+grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
+grpc_client.set_ssh_sessions_pool(ssh_sessions_pool.clone()).await; // keep sessions reused
 ```
+
+SSH uses UNIX socket port-forwarding under the hood to reach the target gRPC endpoint behind the tunnel.
 

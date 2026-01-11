@@ -49,13 +49,12 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
             match result {
                 Ok(response) => return Ok(response),
                 Err(err) => {
+                    attempt_no += 1;
                     if attempt_no >= self.max_attempts_amount {
                         return Err(err);
                     }
                 }
             }
-
-            attempt_no += 1
         }
     }
 
@@ -87,13 +86,12 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
                     ));
                 }
                 Err(err) => {
+                    attempt_no += 1;
                     if attempt_no >= self.max_attempts_amount {
                         return Err(err);
                     }
                 }
             }
-
-            attempt_no += 1
         }
     }
 }

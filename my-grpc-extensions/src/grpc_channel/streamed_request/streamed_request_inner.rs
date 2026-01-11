@@ -92,8 +92,9 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
                             return;
                         }
                     }
-                    RequestAsStream::Initialized(_) => {
-                        panic!("Somehow stream is set for a second time")
+                    RequestAsStream::Initialized(existing_sender) => {
+                        // Allow re-binding sender for retries; drop old sender if present
+                        *existing_sender = None;
                     }
                 }
 

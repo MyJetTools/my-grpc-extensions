@@ -22,8 +22,5 @@ jobs:
       - name: Build default
         run: cargo build
 
-      - name: Build adjust-server-stream         
-        run: cargo build --features adjust-server-stream
-
       - name: Build default
         run: cargo build --all-features        
