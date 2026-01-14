@@ -97,6 +97,13 @@ For streaming responses, you must return the stream handle immediately to establ
 
 ### Streaming Response (Use `tokio::spawn`)
 
+The pattern for streaming responses uses `StreamedResponseWriter`:
+
+1. **Create** `StreamedResponseWriter` with a buffer size
+2. **Extract** the producer using `get_stream_producer()`
+3. **Pass** the producer to the spawned function
+4. **Return** the result using `get_result()` to establish the stream connection immediately
+
 ```rust
 #[with_telemetry]
 async fn get_candles_by_instrument(
@@ -105,10 +112,13 @@ async fn get_candles_by_instrument(
 ) -> Result<tonic::Response<Self::GetCandlesByInstrumentStream>, tonic::Status> {
     let request = request.into_inner();
     
+    // Step 1: Create StreamedResponseWriter
     let mut result = StreamedResponseWriter::new(1024);
+    
+    // Step 2: Extract the producer
     let producer = result.get_stream_producer();
     
-    // Spawn the async work to produce stream items
+    // Step 3: Spawn the async work and pass the producer
     tokio::spawn(crate::flows::get_candles(
         self.app.clone(),
         request.instrument_id,
@@ -117,11 +127,11 @@ async fn get_candles_by_instrument(
         request.is_bid,
         candle_type,
         request.limit.map(|x| x as usize),
-        producer,
+        producer,  // Producer passed to spawned function
         my_telemetry.clone(),
     ));
     
-    // Return immediately so the stream connection is established
+    // Step 4: Return the result immediately to establish stream connection
     result.get_result()
 }
 ```
