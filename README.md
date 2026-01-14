@@ -85,6 +85,72 @@ Streaming helpers (server):
 - `send_single_item_to_stream`, `send_from_iterator`, `create_empty_stream`.
 - Enable `adjust-server-stream` to configure channel size and send timeouts.
 
+## Best Practice: When to Use `tokio::spawn` in gRPC Handlers
+
+**CRITICAL RULE**: Only use `tokio::spawn` when implementing gRPC functions that return **streaming responses**. For non-streaming responses, **generally** await the operation directly.
+
+**Note**: There may be exceptions to this rule for non-streaming responses. Any such exceptions will be documented at the application level (e.g., in application-specific documentation or rules).
+
+### Why This Matters
+
+For streaming responses, you must return the stream handle immediately to establish the connection. The actual data production happens asynchronously in the spawned task. For non-streaming responses, you should typically await the operation to ensure proper error handling and response timing. However, specific application requirements may necessitate spawning tasks for non-streaming responses in certain cases.
+
+### Streaming Response (Use `tokio::spawn`)
+
+```rust
+#[with_telemetry]
+async fn get_candles_by_instrument(
+    &self,
+    request: tonic::Request<GetCandlesHistoryGrpcRequest>,
+) -> Result<tonic::Response<Self::GetCandlesByInstrumentStream>, tonic::Status> {
+    let request = request.into_inner();
+    
+    let mut result = StreamedResponseWriter::new(1024);
+    let producer = result.get_stream_producer();
+    
+    // Spawn the async work to produce stream items
+    tokio::spawn(crate::flows::get_candles(
+        self.app.clone(),
+        request.instrument_id,
+        request.from_key,
+        request.to_key,
+        request.is_bid,
+        candle_type,
+        request.limit.map(|x| x as usize),
+        producer,
+        my_telemetry.clone(),
+    ));
+    
+    // Return immediately so the stream connection is established
+    result.get_result()
+}
+```
+
+### Non-Streaming Response (Do NOT use `tokio::spawn`)
+
+```rust
+#[with_telemetry]
+async fn update_cache_from_db(
+    &self,
+    request: tonic::Request<UpdateCacheFromDbGrpcRequest>,
+) -> Result<tonic::Response<()>, tonic::Status> {
+    let request = request.into_inner();
+    
+    // Await directly - no tokio::spawn needed
+    crate::scripts::update_cache_from_db(self.app.as_ref(), &request.instrument_id)
+        .await
+        .map_err(|err| tonic::Status::internal(err))?;
+    
+    Ok(tonic::Response::new(()))
+}
+```
+
+### Summary
+
+- ✅ **Streaming responses**: Use `tokio::spawn` to return the stream handle immediately
+- ✅ **Non-streaming responses (general rule)**: Await the operation directly - do NOT use `tokio::spawn`
+- ⚠️ **Non-streaming responses (exceptions)**: May use `tokio::spawn` in specific cases - check application-level documentation for exceptions
+
 ## Connecting to gRPC over SSH
 
 Enable `with-ssh` and configure credentials/pool from `my-ssh`:
