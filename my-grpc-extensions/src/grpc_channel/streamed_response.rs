@@ -19,6 +19,24 @@ impl<TItem> StreamedResponse<TItem> {
         crate::read_grpc_stream::as_vec(self.stream, self.time_out).await
     }
 
+    pub async fn get_single_item<TResult: From<TItem>>(
+        mut self,
+    ) -> Result<Option<TResult>, GrpcReadError> {
+        let mut result = None;
+
+        while let Some(item) = self.get_next_item().await {
+            let item = item?;
+            if result.is_none() {
+                let item = TResult::from(item);
+                result = Some(item);
+            } else {
+                panic!("Only single item is allowed");
+            }
+        }
+
+        Ok(result)
+    }
+
     pub fn set_timeout(&mut self, time_out: Duration) {
         self.time_out = time_out
     }
