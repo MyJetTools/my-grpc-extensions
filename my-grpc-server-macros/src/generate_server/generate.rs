@@ -100,13 +100,18 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
     let service_name_lc = service_description.get_service_name().to_lowercase();
 
-    let server_ns =
-        proc_macro2::TokenStream::from_str(format!("{}_server::*", service_name_lc).as_str())
-            .unwrap();
+    let server_ns = proc_macro2::TokenStream::from_str(
+        format!("{}::{}_server::*", crate_ns, service_name_lc).as_str(),
+    )
+    .unwrap();
+
+    let crate_ns = proc_macro2::TokenStream::from_str(crate_ns).unwrap();
+
     let result = quote::quote! {
 
-        use #crate_ns::#server_ns;
+        use #server_ns;
         use #crate_ns::*;
+
         #[tonic::async_trait]
         impl #service_name for #grpc_struct_name{
             #(#functions)*
