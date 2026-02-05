@@ -55,11 +55,14 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
         let mut stream_description = quote::quote! {};
 
-        let out_type = if let Some(out_param) = rpc.get_output_param() {
+        let (out_type, result_conversion) = if let Some(out_param) = rpc.get_output_param() {
             match out_param {
                 proto_file_reader::ParamType::Single(tp_name) => {
                     let tp_name = proc_macro2::TokenStream::from_str(tp_name).unwrap();
-                    quote::quote! {tonic::Response<#tp_name>}
+                    (
+                        quote::quote! {tonic::Response<#tp_name>},
+                        quote::quote! {Ok(result.into())},
+                    )
                 }
                 proto_file_reader::ParamType::Stream(tp_name) => {
                     let fn_name_streamed = format!("Get{}", fn_name_str.as_str());
@@ -70,11 +73,17 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
                     let fn_name =
                         proc_macro2::TokenStream::from_str(fn_name_streamed.as_str()).unwrap();
-                    quote::quote! {tonic::Response<Self::#fn_name>}
+                    (
+                        quote::quote! {tonic::Response<Self::#fn_name>},
+                        quote::quote! {result.get_result()},
+                    )
                 }
             }
         } else {
-            quote::quote! {tonic::Response<()>}
+            (
+                quote::quote! {tonic::Response<()>},
+                quote::quote! {Ok(result.into())},
+            )
         };
 
         functions.push(quote::quote! {
@@ -83,6 +92,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
             async fn #fn_name(&self, request:#input_param)->Result<#out_type, tonic::Status>{
                 let result = #fn_name(&self.app, request.into()).await;
+                #result_conversion
             }
         });
     }
