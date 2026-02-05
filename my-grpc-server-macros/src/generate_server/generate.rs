@@ -3,8 +3,6 @@ use std::str::FromStr;
 use proto_file_reader::ProtoServiceDescription;
 use types_reader::TokensObject;
 
-use crate::with_telemetry;
-
 pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStream, syn::Error> {
     let params_list = TokensObject::new(input.into())?;
 
@@ -49,9 +47,9 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
     for rpc in service_description.rpc.iter() {
         let fn_name_str = rpc.get_fn_name();
 
-        let (with_telemetry, telemetry_param) = if with_telemetry {
-            /*   let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());*/
-            let with_telemetry = quote::quote! {};
+        let (telemetry_injection, telemetry_param) = if with_telemetry {
+            let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());
+
             let param = quote::quote! {
                 my_telemetry
             };
@@ -94,7 +92,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
                     let fn_name_streamed = format!("{}Stream", fn_name_str.as_str());
 
                     stream_description = quote::quote! {
-                         generate_server_stream!(stream_name:#fn_name_streamed, item_name:#tp_name);
+                         generate_server_stream!(stream_name: #fn_name_streamed, item_name: #tp_name);
                     };
 
                     let fn_name =
@@ -118,7 +116,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
             async fn #fn_name(&self, request:#input_param , #telemetry_param)->Result<#out_type, tonic::Status>{
 
-                #with_telemetry
+                #telemetry_injection
 
                 let request = request.into_inner();
                 let result = #fn_name(&self.app, request.into()).await;
