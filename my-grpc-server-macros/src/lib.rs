@@ -5,6 +5,7 @@ mod generate_server_stream;
 mod with_result_stream;
 mod with_telemetry;
 
+mod consts;
 mod generate_stream;
 
 #[proc_macro_attribute]

@@ -55,15 +55,7 @@ pub fn generate(
 }
 
 fn inject_body(fn_name: &str, group: &Group) -> proc_macro2::TokenStream {
-    let to_inject = quote::quote! {
-        let my_telemetry = my_grpc_extensions::get_telemetry(
-            &request.metadata(),
-            request.remote_addr(),
-            #fn_name,
-        );
-
-        let my_telemetry = my_telemetry.get_ctx();
-    };
+    let to_inject = crate::consts::inject_telemetry_line(fn_name);
 
     let tokens_to_insert: Vec<proc_macro2::TokenTree> =
         to_inject.into_token_stream().into_iter().collect();

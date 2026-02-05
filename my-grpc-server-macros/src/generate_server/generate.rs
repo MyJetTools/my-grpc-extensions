@@ -30,10 +30,26 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
     let crate_ns = crate_ns.unwrap_any_value_as_str()?;
     let crate_ns = crate_ns.as_str()?;
 
+    let with_telemetry = params_list.get_named_param("with_telemetry")?;
+    let with_telemetry = with_telemetry.unwrap_as_value()?;
+    let with_telemetry = with_telemetry.unwrap_value()?;
+    let with_telemetry = with_telemetry.as_bool()?;
+
     let mut functions = Vec::new();
 
     for rpc in service_description.rpc.iter() {
         let fn_name_str = rpc.get_fn_name();
+
+        let (with_telemetry, telemetry_param) = if with_telemetry.get_value() {
+            let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());
+            let param = quote::quote! {
+                my_telemetry
+            };
+
+            (with_telemetry, param)
+        } else {
+            (quote::quote! {}, quote::quote! {})
+        };
 
         let fn_name =
             proc_macro2::TokenStream::from_str(fn_name_str.as_snake_case().as_str()).unwrap();
@@ -90,7 +106,8 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
             #stream_description
 
-            async fn #fn_name(&self, request:#input_param)->Result<#out_type, tonic::Status>{
+            async fn #fn_name(&self, request:#input_param, #telemetry_param)->Result<#out_type, tonic::Status>{
+                #with_telemetry
                 let request = request.into_inner();
                 let result = #fn_name(&self.app, request.into()).await;
                 #result_conversion
