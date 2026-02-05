@@ -101,11 +101,13 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         #[tonic::async_trait]
         impl #service_name for #grpc_struct_name{
             #(#functions)*
+
+          async fn ping(&self, _: tonic::Request<()>) -> Result<tonic::Response<()>, tonic::Status> {
+              Ok(tonic::Response::new(()))
+          }
         }
 
-        async fn ping(&self, _: tonic::Request<()>) -> Result<tonic::Response<()>, tonic::Status> {
-          Ok(tonic::Response::new(()))
-        }
+
     };
 
     Ok(result.into())
