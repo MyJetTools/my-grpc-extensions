@@ -116,7 +116,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
             #stream_description
 
-            async fn #fn_name(&self, request:#input_param , telemetry_param)->Result<#out_type, tonic::Status>{
+            async fn #fn_name(&self, request:#input_param , #telemetry_param)->Result<#out_type, tonic::Status>{
 
                 #with_telemetry
 
