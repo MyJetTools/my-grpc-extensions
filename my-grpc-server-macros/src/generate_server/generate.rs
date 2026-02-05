@@ -93,6 +93,9 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
             #(#functions)*
         }
 
+        async fn ping(&self, _: tonic::Request<()>) -> Result<tonic::Response<()>, tonic::Status> {
+          Ok(tonic::Response::new(()))
+        }
     };
 
     Ok(result.into())
