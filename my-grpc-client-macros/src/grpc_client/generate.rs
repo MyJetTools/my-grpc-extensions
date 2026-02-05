@@ -35,7 +35,7 @@ pub fn generate(
     let proto_file = ProtoServiceDescription::read_proto_file(&proto_file);
 
     let grpc_service_name = &proto_file.service_name;
-    let grpc_service_name_token = proc_macro2::TokenStream::from_str(proto_file.get_service_name()).unwrap() ;
+    let grpc_service_name_token = proc_macro2::TokenStream::from_str(proto_file.get_client_service_name().as_str()).unwrap() ;
 
     let interfaces = super::generate_interfaces_implementations(struct_name, &proto_file);
 

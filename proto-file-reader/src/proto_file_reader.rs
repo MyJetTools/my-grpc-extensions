@@ -34,6 +34,10 @@ impl ProtoServiceDescription {
         &self.service_name
     }
 
+    pub fn get_client_service_name(&self) -> String {
+        format!("{}Client", self.service_name)
+    }
+
     pub fn has_method(&self, method_name: &str) -> bool {
         for rpc in &self.rpc {
             if rpc.name == method_name {
@@ -141,7 +145,7 @@ impl ProtoServiceDescription {
                         out_param_name.push_str(token);
                     }
                     CurrentToken::Service => {
-                        service_name = Some(format!("{}Client", token));
+                        service_name = Some(format!("{}", token));
                         current_token = CurrentToken::None;
                     }
                 }
