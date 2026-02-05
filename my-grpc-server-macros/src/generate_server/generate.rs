@@ -50,9 +50,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         let (telemetry_injection, telemetry_param) = if with_telemetry {
             let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());
 
-            let param = quote::quote! {
-                my_telemetry
-            };
+            let param = proc_macro2::TokenStream::from_str("my_telemetry").unwrap();
 
             (with_telemetry, param)
         } else {
