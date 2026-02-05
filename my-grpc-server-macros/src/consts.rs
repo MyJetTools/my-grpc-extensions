@@ -1,6 +1,6 @@
 pub fn inject_telemetry_line(fn_name: &str) -> proc_macro2::TokenStream {
     quote::quote! {
-        my_grpc_extensions::get_telemetry(
+        let my_telemetry = my_grpc_extensions::get_telemetry(
             &request.metadata(),
             request.remote_addr(),
             #fn_name,

@@ -30,17 +30,24 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
     let crate_ns = crate_ns.unwrap_any_value_as_str()?;
     let crate_ns = crate_ns.as_str()?;
 
-    let with_telemetry = params_list.get_named_param("with_telemetry")?;
-    let with_telemetry = with_telemetry.unwrap_as_value()?;
-    let with_telemetry = with_telemetry.unwrap_value()?;
-    let with_telemetry = with_telemetry.as_bool()?;
+    let with_telemetry = params_list.try_get_named_param("with_telemetry");
+
+    let with_telemetry = match with_telemetry {
+        Some(with_telemetry) => {
+            let with_telemetry = with_telemetry.unwrap_as_value()?;
+            let with_telemetry = with_telemetry.unwrap_value()?;
+            let with_telemetry = with_telemetry.as_bool()?;
+            with_telemetry.get_value()
+        }
+        None => false,
+    };
 
     let mut functions = Vec::new();
 
     for rpc in service_description.rpc.iter() {
         let fn_name_str = rpc.get_fn_name();
 
-        let (with_telemetry, telemetry_param) = if with_telemetry.get_value() {
+        let (with_telemetry, telemetry_param) = if with_telemetry {
             let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());
             let param = quote::quote! {
                 my_telemetry
