@@ -46,7 +46,7 @@ impl<TResult: Send + Sync + 'static> StreamedResponseWriter<TResult> {
     }
 
     pub fn get_result(
-        &mut self,
+        mut self,
     ) -> Result<
         tonic::Response<
             Pin<
