@@ -4,7 +4,15 @@ use proto_file_reader::ProtoServiceDescription;
 use types_reader::TokensObject;
 
 pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStream, syn::Error> {
-    let params_list = TokensObject::new(input.into())?;
+    let as_str = input.to_string();
+    let params_list = TokensObject::new(input.into());
+
+    let params_list = match params_list {
+        Ok(params_list) => params_list,
+        Err(err) => {
+            panic!("Can not parse params '{}'. Err: {:?}", as_str, err);
+        }
+    };
 
     let proto_file = params_list.get_named_param("proto_file")?;
     let proto_file = proto_file.unwrap_any_value_as_str()?;
