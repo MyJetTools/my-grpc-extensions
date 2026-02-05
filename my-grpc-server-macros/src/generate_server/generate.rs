@@ -3,6 +3,8 @@ use std::str::FromStr;
 use proto_file_reader::ProtoServiceDescription;
 use types_reader::TokensObject;
 
+use crate::with_telemetry;
+
 pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStream, syn::Error> {
     let params_list = TokensObject::new(input.into())?;
 
@@ -48,7 +50,8 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         let fn_name_str = rpc.get_fn_name();
 
         let (with_telemetry, telemetry_param) = if with_telemetry {
-            let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());
+            /*   let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());*/
+            let with_telemetry = quote::quote! {};
             let param = quote::quote! {
                 my_telemetry
             };
@@ -113,7 +116,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
 
             #stream_description
 
-            async fn #fn_name(&self, request:#input_param)->Result<#out_type, tonic::Status>{
+            async fn #fn_name(&self, request:#input_param , telemetry_param)->Result<#out_type, tonic::Status>{
 
                 #with_telemetry
 
