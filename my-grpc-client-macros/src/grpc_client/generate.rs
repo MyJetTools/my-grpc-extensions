@@ -35,7 +35,7 @@ pub fn generate(
     let proto_file = ProtoServiceDescription::read_proto_file(&proto_file);
 
     let grpc_service_name = &proto_file.service_name;
-    let grpc_service_name_token = proc_macro2::TokenStream::from_str(proto_file.get_client_service_name().as_str()).unwrap() ;
+    let grpc_service_name_token = proc_macro2::TokenStream::from_str(proto_file.get_service_name()).unwrap() ;
 
     let interfaces = super::generate_interfaces_implementations(struct_name, &proto_file);
 
@@ -53,7 +53,7 @@ pub fn generate(
     let mut use_name_spaces = Vec::new();
     use_name_spaces.push(proc_macro2::TokenStream::from_str(format!("use {}::*", crate_ns).as_str()).unwrap());
 
-    let ns_of_client = format!("use {}::{}::{}", crate_ns,into_snake_case(&grpc_service_name), grpc_service_name);
+    let ns_of_client = format!("use {}::{}_client::{}Client", crate_ns,into_snake_case(&grpc_service_name), grpc_service_name);
     use_name_spaces.push(proc_macro2::TokenStream::from_str(ns_of_client.as_str()).unwrap());
 
 
