@@ -55,14 +55,12 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
     for rpc in service_description.rpc.iter() {
         let fn_name_str = rpc.get_fn_name();
 
-        let (telemetry_injection, telemetry_param) = if with_telemetry {
+        let telemetry_injection = if with_telemetry {
             let with_telemetry = crate::consts::inject_telemetry_line(fn_name_str.as_str());
 
-            let param = proc_macro2::TokenStream::from_str("my_telemetry").unwrap();
-
-            (with_telemetry, param)
+            Some(with_telemetry)
         } else {
-            (quote::quote! {}, quote::quote! {})
+            None
         };
 
         let fn_name =
@@ -116,19 +114,28 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
             )
         };
 
-        functions.push(quote::quote! {
+        if let Some(telemetry_injection) = telemetry_injection {
+            functions.push(quote::quote! {
 
-            #stream_description
+                #stream_description
 
-            async fn #fn_name(&self, request:#input_param, my_telemetry)->Result<#out_type, tonic::Status>{
-
-                #telemetry_injection
-
-                let request = request.into_inner();
-                let result = #fn_name(&self.app, request.into()).await;
-                #result_conversion
-            }
-        });
+                async fn #fn_name(&self, request:#input_param)->Result<#out_type, tonic::Status>{
+                    #telemetry_injection
+                    let request = request.into_inner();
+                    let result = #fn_name(&self.app, request.into(),my_telemetry).await;
+                    #result_conversion
+                }
+            });
+        } else {
+            functions.push(quote::quote! {
+                #stream_description
+                async fn #fn_name(&self, request:#input_param)->Result<#out_type, tonic::Status>{
+                    let request = request.into_inner();
+                    let result = #fn_name(&self.app, request.into()).await;
+                    #result_conversion
+                }
+            });
+        }
     }
 
     let service_name_lc = service_description.get_service_name().to_lowercase();
