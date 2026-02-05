@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{collections::HashSet, hash::Hash, sync::Arc};
 
 use tokio::sync::Mutex;
 
@@ -49,5 +49,14 @@ impl<TItem: Send + Sync + 'static + Clone> StreamedRequest<TItem> {
 impl<TItem: Send + Sync + 'static + Clone> Into<StreamedRequest<TItem>> for Vec<TItem> {
     fn into(self) -> StreamedRequest<TItem> {
         StreamedRequest::new_as_vec(self)
+    }
+}
+
+impl<TItem: Send + Sync + 'static + Clone + Eq + Hash> Into<StreamedRequest<TItem>>
+    for HashSet<TItem>
+{
+    fn into(self) -> StreamedRequest<TItem> {
+        let data: Vec<_> = self.into_iter().collect();
+        StreamedRequest::new_as_vec(data)
     }
 }
