@@ -65,7 +65,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
                     )
                 }
                 proto_file_reader::ParamType::Stream(tp_name) => {
-                    let fn_name_streamed = format!("Get{}", fn_name_str.as_str());
+                    let fn_name_streamed = format!("{}Stream", fn_name_str.as_str());
 
                     stream_description = quote::quote! {
                          generate_server_stream!(stream_name:#fn_name_streamed, item_name:#tp_name);
