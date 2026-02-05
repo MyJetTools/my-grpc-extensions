@@ -91,6 +91,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
             #stream_description
 
             async fn #fn_name(&self, request:#input_param)->Result<#out_type, tonic::Status>{
+                let request = request.into_inner();
                 let result = #fn_name(&self.app, request.into()).await;
                 #result_conversion
             }
