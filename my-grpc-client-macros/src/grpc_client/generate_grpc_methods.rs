@@ -1,6 +1,8 @@
 use std::{collections::HashMap, str::FromStr};
 
-use super::{fn_override::FnOverride, proto_file_reader::ProtoServiceDescription, ParamType};
+use proto_file_reader::{ParamType, ProtoServiceDescription};
+
+use super::fn_override::FnOverride;
 
 pub fn generate_grpc_methods(
     proto_file: &ProtoServiceDescription,
@@ -11,7 +13,8 @@ pub fn generate_grpc_methods(
     let mut result = Vec::new();
 
     for rpc in &proto_file.rpc {
-        let fn_name = rpc.get_fn_name_as_token();
+        let fn_name =
+            proc_macro2::TokenStream::from_str(rpc.get_fn_name().as_snake_case().as_str()).unwrap();
 
         let input_param = rpc.get_input_param();
 
@@ -75,7 +78,7 @@ pub fn generate_grpc_methods(
     result
 }
 
-fn get_request_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macro2::TokenStream {
+fn get_request_fn_name(input_param: Option<&ParamType<'_>>) -> proc_macro2::TokenStream {
     match input_param {
         Some(input_param) => {
             if input_param.is_stream() {
@@ -90,7 +93,7 @@ fn get_request_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macro
     }
 }
 
-fn get_response_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macro2::TokenStream {
+fn get_response_fn_name(input_param: Option<&ParamType<'_>>) -> proc_macro2::TokenStream {
     match input_param {
         Some(input_param) => {
             if input_param.is_stream() {
@@ -105,7 +108,7 @@ fn get_response_fn_name(input_param: Option<&super::ParamType<'_>>) -> proc_macr
     }
 }
 
-fn get_func_in_data_type(data_type: Option<&super::ParamType<'_>>) -> proc_macro2::TokenStream {
+fn get_func_in_data_type(data_type: Option<&ParamType<'_>>) -> proc_macro2::TokenStream {
     match data_type {
         Some(input_param) => match input_param {
             ParamType::Single(name) => proc_macro2::TokenStream::from_str(name).unwrap(),
@@ -120,7 +123,7 @@ fn get_func_in_data_type(data_type: Option<&super::ParamType<'_>>) -> proc_macro
     }
 }
 
-fn get_func_out_data_type(data_type: Option<&super::ParamType<'_>>) -> proc_macro2::TokenStream {
+fn get_func_out_data_type(data_type: Option<&ParamType<'_>>) -> proc_macro2::TokenStream {
     match data_type {
         Some(input_param) => match input_param {
             ParamType::Single(name) => proc_macro2::TokenStream::from_str(name).unwrap(),

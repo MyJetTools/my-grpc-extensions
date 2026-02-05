@@ -1,0 +1,7 @@
+[package]
+name = "proto-file-reader"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rust-extensions = { tag = "0.1.5", git = "https://github.com/MyJetTools/rust-extensions.git" }

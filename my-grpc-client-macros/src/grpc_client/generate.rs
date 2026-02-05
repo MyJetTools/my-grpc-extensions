@@ -2,12 +2,12 @@
 
 use std::str::FromStr;
 
+use proto_file_reader::{ProtoServiceDescription, into_snake_case};
 use types_reader::TokensObject;
 
 
-use crate::grpc_client::{fn_override::FnOverride, proto_file_reader::into_snake_case};
+use crate::grpc_client::{fn_override::FnOverride};
 
-use super::proto_file_reader::ProtoServiceDescription;
 
 pub fn generate(
     attr: proc_macro::TokenStream,
@@ -35,7 +35,7 @@ pub fn generate(
     let proto_file = ProtoServiceDescription::read_proto_file(&proto_file);
 
     let grpc_service_name = &proto_file.service_name;
-    let grpc_service_name_token = proto_file.get_service_name_as_token();
+    let grpc_service_name_token = proc_macro2::TokenStream::from_str(proto_file.get_service_name()).unwrap() ;
 
     let interfaces = super::generate_interfaces_implementations(struct_name, &proto_file);
 

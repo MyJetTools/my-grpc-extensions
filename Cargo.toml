@@ -4,4 +4,5 @@ members = [
     "my-grpc-client-macros",
     "my-grpc-server-macros",
     "external-dependencies",
+    "proto-file-reader",
 ]

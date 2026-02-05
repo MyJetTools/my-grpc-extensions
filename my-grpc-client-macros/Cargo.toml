@@ -15,6 +15,7 @@ proc-macro = true
 
 [dependencies]
 types-reader = { tag = "0.5.1", git = "https://github.com/MyJetTools/types-reader.git" }
+proto-file-reader = { path = "../proto-file-reader" }
 
 syn = { version = "*", features = ["extra-traits"] }
 quote = "*"

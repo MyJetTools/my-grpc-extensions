@@ -1,8 +1,7 @@
 use std::str::FromStr;
 
 use proc_macro2::Ident;
-
-use super::{proto_file_reader::ProtoServiceDescription, ParamType};
+use proto_file_reader::{ParamType, ProtoServiceDescription};
 
 pub fn generate_interfaces_implementations(
     struct_name: &Ident,
@@ -15,16 +14,25 @@ pub fn generate_interfaces_implementations(
             if let Some(output_param_type) = &rpc.get_output_param() {
                 let input_param_type_token = get_name_fn_param_type_token(&input_param_type);
 
-                let output_param_type_token = output_param_type.get_output_param_type_token();
+                let output_param_type_token = proc_macro2::TokenStream::from_str(
+                    output_param_type.get_output_param_type().as_str(),
+                )
+                .unwrap();
 
-                let input_param_name_token = input_param_type.get_name_as_token();
-                let output_param_name_token = output_param_type.get_name_as_token();
+                let input_param_name_token =
+                    proc_macro2::TokenStream::from_str(input_param_type.get_name()).unwrap();
+                let output_param_name_token =
+                    proc_macro2::TokenStream::from_str(output_param_type.get_name()).unwrap();
 
                 let interface_name = get_interface_name(&input_param_type, &output_param_type);
 
-                let fn_name = rpc.get_fn_name_as_token();
+                let fn_name =
+                    proc_macro2::TokenStream::from_str(rpc.get_fn_name().as_snake_case().as_str())
+                        .unwrap();
 
-                let input_param_invoke = input_param_type.get_input_param_invoke_token();
+                let input_param_invoke =
+                    proc_macro2::TokenStream::from_str(input_param_type.get_input_param_invoke())
+                        .unwrap();
 
                 let quote = quote::quote! {
                     #[async_trait::async_trait]
@@ -63,13 +71,18 @@ pub fn generate_interfaces_implementations(
 
                 let output_param_type_token = quote::quote! {()};
 
-                let input_param_name_token = input_param_type.get_name_as_token();
+                let input_param_name_token =
+                    proc_macro2::TokenStream::from_str(input_param_type.get_name()).unwrap();
 
                 let interface_name = get_interface_name_with_input_param_only(&input_param_type);
 
-                let fn_name = rpc.get_fn_name_as_token();
+                let fn_name =
+                    proc_macro2::TokenStream::from_str(rpc.get_fn_name().as_snake_case().as_str())
+                        .unwrap();
 
-                let input_param_invoke = input_param_type.get_input_param_invoke_token();
+                let input_param_invoke =
+                    proc_macro2::TokenStream::from_str(input_param_type.get_input_param_invoke())
+                        .unwrap();
 
                 let quote = quote::quote! {
                     #[async_trait::async_trait]
@@ -108,13 +121,19 @@ pub fn generate_interfaces_implementations(
             if let Some(output_param_type) = &rpc.get_output_param() {
                 let input_param_type_token = quote::quote! {()};
 
-                let output_param_type_token = output_param_type.get_output_param_type_token();
+                let output_param_type_token = proc_macro2::TokenStream::from_str(
+                    output_param_type.get_output_param_type().as_str(),
+                )
+                .unwrap();
 
-                let output_param_name_token = output_param_type.get_name_as_token();
+                let output_param_name_token =
+                    proc_macro2::TokenStream::from_str(output_param_type.get_name()).unwrap();
 
                 let interface_name = get_interface_name_with_output_param_only(&output_param_type);
 
-                let fn_name = rpc.get_fn_name_as_token();
+                let fn_name =
+                    proc_macro2::TokenStream::from_str(rpc.get_fn_name().as_snake_case().as_str())
+                        .unwrap();
 
                 let quote = quote::quote! {
                     #[async_trait::async_trait]
@@ -161,8 +180,8 @@ pub fn generate_interfaces_implementations(
 }
 
 fn get_interface_name(
-    input_param: &super::ParamType<'_>,
-    output_param: &super::ParamType<'_>,
+    input_param: &ParamType<'_>,
+    output_param: &ParamType<'_>,
 ) -> proc_macro2::TokenStream {
     if input_param.is_stream() {
         if output_param.is_stream() {
@@ -182,7 +201,7 @@ fn get_interface_name(
 }
 
 fn get_interface_name_with_input_param_only(
-    input_param: &super::ParamType<'_>,
+    input_param: &ParamType<'_>,
 ) -> proc_macro2::TokenStream {
     if input_param.is_stream() {
         quote::quote!(my_grpc_extensions::RequestWithInputAsStreamGrpcExecutor)
@@ -192,7 +211,7 @@ fn get_interface_name_with_input_param_only(
 }
 
 fn get_interface_name_with_output_param_only(
-    output_param: &super::ParamType<'_>,
+    output_param: &ParamType<'_>,
 ) -> proc_macro2::TokenStream {
     if output_param.is_stream() {
         quote::quote!(my_grpc_extensions::RequestWithResponseAsStreamGrpcExecutor)
