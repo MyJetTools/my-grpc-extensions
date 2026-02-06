@@ -30,8 +30,8 @@ pub struct ProtoServiceDescription {
 }
 
 impl ProtoServiceDescription {
-    pub fn get_service_name(&self) -> &str {
-        &self.service_name
+    pub fn get_service_name<'s>(&'s self) -> ProtoString<'s> {
+        ProtoString::new(self.service_name.as_str())
     }
 
     pub fn has_method(&self, method_name: &str) -> bool {
@@ -188,6 +188,9 @@ pub fn into_snake_case(src: &str) -> String {
 pub struct ProtoString<'s>(&'s str);
 
 impl<'s> ProtoString<'s> {
+    pub fn new(str: &'s str) -> Self {
+        Self(str)
+    }
     pub fn as_snake_case(&self) -> String {
         into_snake_case(self.0)
     }

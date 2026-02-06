@@ -21,7 +21,8 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
     let service_description = ProtoServiceDescription::read_proto_file(proto_file);
 
     let service_name =
-        proc_macro2::TokenStream::from_str(service_description.get_service_name()).unwrap();
+        proc_macro2::TokenStream::from_str(service_description.get_service_name().as_str())
+            .unwrap();
 
     let grpc_struct_name = params_list.try_get_named_param("grpc_struct_name");
 
@@ -138,10 +139,10 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         }
     }
 
-    let service_name_lc = service_description.get_service_name().to_lowercase();
+    let service_name_snake_case = service_description.get_service_name().as_snake_case();
 
     let server_ns = proc_macro2::TokenStream::from_str(
-        format!("{}::{}_server::*", crate_ns, service_name_lc).as_str(),
+        format!("{}::{}_server::*", crate_ns, service_name_snake_case).as_str(),
     )
     .unwrap();
 
