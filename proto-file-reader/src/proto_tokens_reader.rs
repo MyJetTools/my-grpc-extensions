@@ -1,53 +1,70 @@
 pub struct ProtoTokensReader<'s> {
-    content: &'s [u8],
+    content: Vec<&'s [u8]>,
     pos: usize,
 }
 
 impl<'s> ProtoTokensReader<'s> {
     pub fn new(content: &'s str) -> Self {
-        Self {
-            content: content.as_bytes(),
-            pos: 0,
-        }
+        let content = clean_up_comments(content);
+        Self { content, pos: 0 }
     }
 
     pub fn get_next(&mut self) -> Option<&'s str> {
-        let mut start_pos = None;
-        while self.pos < self.content.len() {
-            let b = self.content[self.pos];
-            if b <= 32 {
-                if let Some(start_pos) = start_pos {
-                    return Some(std::str::from_utf8(&self.content[start_pos..self.pos]).unwrap());
-                }
-                self.pos += 1;
-                continue;
+        while self.content.len() > 0 {
+            let first_line = *self.content.first()?;
+
+            if let Some(result) = iterate_through_line(first_line, self.pos) {
+                self.pos = result.1;
+                return Some(result.0);
             }
 
-            if b == b'(' || b == b')' || b == b';' || b == b'{' || b == b'}' {
-                if let Some(start_pos) = start_pos {
-                    return Some(std::str::from_utf8(&self.content[start_pos..self.pos]).unwrap());
-                }
-
-                let result = std::str::from_utf8(&self.content[self.pos..self.pos + 1]).unwrap();
-
-                self.pos += 1;
-
-                return Some(result);
-            }
-
-            if start_pos.is_none() {
-                start_pos = Some(self.pos);
-            }
-
-            self.pos += 1;
-        }
-
-        if let Some(start_pos) = start_pos {
-            return Some(std::str::from_utf8(&self.content[start_pos..self.pos]).unwrap());
+            self.content.remove(0);
+            self.pos = 0;
         }
 
         None
     }
+}
+
+fn iterate_through_line(line: &[u8], mut pos: usize) -> Option<(&str, usize)> {
+    let mut start_pos = None;
+    while pos < line.len() {
+        let b = line[pos];
+        if b <= 32 {
+            if let Some(start_pos) = start_pos {
+                let result = std::str::from_utf8(&line[start_pos..pos]).unwrap();
+                return Some((result, pos));
+            }
+            pos += 1;
+            continue;
+        }
+
+        if b == b'(' || b == b')' || b == b';' || b == b'{' || b == b'}' {
+            if let Some(start_pos) = start_pos {
+                let result = std::str::from_utf8(&line[start_pos..pos]).unwrap();
+                return Some((result, pos));
+            }
+
+            let result = std::str::from_utf8(&line[pos..pos + 1]).unwrap();
+
+            pos += 1;
+
+            return Some((result, pos));
+        }
+
+        if start_pos.is_none() {
+            start_pos = Some(pos);
+        }
+
+        pos += 1;
+    }
+
+    if let Some(start_pos) = start_pos {
+        let result = std::str::from_utf8(&line[start_pos..pos]).unwrap();
+        return Some((result, pos));
+    }
+
+    None
 }
 
 impl<'s> Iterator for ProtoTokensReader<'s> {
@@ -56,6 +73,18 @@ impl<'s> Iterator for ProtoTokensReader<'s> {
     fn next(&mut self) -> Option<Self::Item> {
         self.get_next()
     }
+}
+
+fn clean_up_comments(src: &str) -> Vec<&[u8]> {
+    let mut result = Vec::new();
+    for itm in src.split('\n') {
+        if itm.trim().starts_with("//") {
+            continue;
+        }
+        result.push(itm.as_bytes());
+    }
+
+    result
 }
 
 #[cfg(test)]
