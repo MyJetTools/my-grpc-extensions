@@ -1,7 +1,9 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     time::Duration,
 };
+
+use rust_extensions::chrono::format::Item;
 
 use crate::GrpcReadError;
 
@@ -54,7 +56,7 @@ impl<TItem> StreamedResponse<TItem> {
             .await
     }
 
-    pub async fn into_has_map<TResult, TKey>(
+    pub async fn into_hash_map<TResult, TKey>(
         self,
         get_key: impl Fn(TItem) -> (TKey, TResult),
     ) -> Result<HashMap<TKey, TResult>, GrpcReadError>
@@ -62,6 +64,24 @@ impl<TItem> StreamedResponse<TItem> {
         TKey: std::cmp::Eq + core::hash::Hash + Clone,
     {
         crate::read_grpc_stream::as_hash_map(self.stream, get_key, self.time_out).await
+    }
+
+    pub async fn into_hash_set<TKey>(
+        mut self,
+        convert: impl Fn(TItem) -> TKey,
+    ) -> Result<HashSet<TKey>, GrpcReadError>
+    where
+        TKey: std::cmp::Eq + core::hash::Hash + Clone,
+    {
+        let mut result = HashSet::new();
+
+        while let Some(item) = self.get_next_item().await {
+            let item = item?;
+
+            result.insert(convert(item));
+        }
+
+        Ok(result)
     }
 
     pub async fn into_b_tree_map<TResult, TKey>(
