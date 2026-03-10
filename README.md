@@ -27,6 +27,157 @@ Feature flags:
 - `with-tls` – enable TLS support via `my-tls`.
 - `adjust-server-stream` – customize gRPC server stream channel size/send timeout.
 
+## Server quickstart
+
+### 1. Module setup
+
+`src/grpc_server/mod.rs`:
+```rust
+mod my_service_grpc_server;
+pub use my_service_grpc_server::*;
+
+service_sdk::macros::use_grpc_server!();
+```
+
+### 2. Server implementation file
+
+`src/grpc_server/my_service_grpc_server.rs`:
+```rust
+use std::sync::Arc;
+use crate::{app::AppContext, models::FlowError};
+
+service_sdk::macros::use_grpc_server!();
+
+// Macro reads the proto file and generates the server boilerplate.
+// You implement one plain async fn per RPC method.
+generate_server!(proto_file: "./proto/MyService.proto", crate_ns: "crate::my_service_grpc");
+
+// Proto method name (PascalCase) → Rust function name (snake_case)
+// rpc ClosePosition(...) → async fn close_position(...)
+// rpc GetInstruments(...) → async fn get_instruments(...)
+// rpc PostBidAsk(...) → async fn post_bid_ask(...)
+
+// Non-streaming: return the response type directly
+async fn close_position(
+    app: &Arc<AppContext>,
+    request: ClosePositionGrpcRequest,  // request fields unwrapped — no tonic::Request<T>
+) -> ClosePositionGrpcResponse {
+    // await directly, no tokio::spawn
+    todo!()
+}
+
+// Streaming output (server → client): return StreamedResponseWriter<T>
+async fn get_instruments(
+    app: &Arc<AppContext>,
+    _request: (),  // google.protobuf.Empty → ()
+) -> StreamedResponseWriter<InstrumentGrpcModel> {
+    let result = StreamedResponseWriter::new(1024);
+    let producer = result.get_stream_producer();
+    tokio::spawn(crate::flows::get_instruments(app.clone(), producer));
+    result
+}
+
+// Streaming input (client → server): receive StreamedRequestReader<T>
+async fn post_bid_ask(
+    app: &Arc<AppContext>,
+    request: StreamedRequestReader<BidAskGrpcModel>,
+) {
+    let items = request.into_vec().await.unwrap();
+    crate::flows::handle_bid_ask(app, items).await;
+}
+```
+
+### 3. Include proto module and register in `main.rs`
+
+```rust
+mod my_service_grpc {
+    tonic::include_proto!("my_service");  // package name from proto file
+}
+
+use my_service_grpc::my_service_server::*;
+
+// In main():
+service_context.configure_grpc_server(|builder| {
+    builder.add_grpc_service(MyServiceServer::new(SdkGrpcService::new(app.clone())))
+});
+```
+
+### Key rules
+- Function names are **snake_case** of the proto RPC name
+- First param is always `app: &Arc<AppContext>`
+- Request type is the proto message directly (no `tonic::Request<T>` wrapper)
+- `google.protobuf.Empty` input → `_request: ()`
+- Return type is the proto message directly (no `tonic::Response<T>` wrapper)
+
+---
+
+## When to use `tokio::spawn` in gRPC handlers
+
+**Rule: only use `tokio::spawn` for streaming output responses.**
+
+| Case | `tokio::spawn`? |
+|------|----------------|
+| Streaming output (server → client) | **Yes** — must return stream handle immediately |
+| Streaming input (client → server) | No — collect with `request.into_vec().await` |
+| Non-streaming response | No — await directly |
+
+### Streaming output — use `tokio::spawn`
+
+```rust
+async fn get_instruments(
+    app: &Arc<AppContext>,
+    _request: (),
+) -> StreamedResponseWriter<InstrumentGrpcModel> {
+    let result = StreamedResponseWriter::new(1024);
+    let producer = result.get_stream_producer();
+    tokio::spawn(crate::flows::get_instruments(app.clone(), producer));
+    result
+}
+```
+
+The spawned function receives a `StreamedResponseProducer<T>`:
+
+```rust
+pub async fn get_instruments(
+    app: Arc<AppContext>,
+    producer: StreamedResponseProducer<InstrumentGrpcModel>,
+) {
+    let cache = app.trading_data_holder.lock().await;
+    for instrument in cache.instruments.get_all() {
+        producer.send(instrument.into()).await.unwrap();
+    }
+}
+```
+
+### Streaming input — no `tokio::spawn`
+
+```rust
+async fn post_bid_ask(
+    app: &Arc<AppContext>,
+    request: StreamedRequestReader<BidAskGrpcModel>,
+) {
+    let items = request.into_vec().await.unwrap();
+    crate::flows::handle_bid_ask(app, items).await;
+}
+```
+
+### Non-streaming — no `tokio::spawn`
+
+```rust
+async fn close_position(
+    app: &Arc<AppContext>,
+    request: ClosePositionGrpcRequest,
+) -> ClosePositionGrpcResponse {
+    let result = crate::flows::close_position(app, request.account_id.into()).await;
+    match result {
+        Ok(_) => ClosePositionGrpcResponse { result: MarginEngineGrpcResult::Ok.into() },
+        Err(err) => ClosePositionGrpcResponse { result: err.into() },
+    }
+}
+```
+
+---
+
 ## Client macro quickstart
 
 ```rust
@@ -65,76 +216,7 @@ impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
 }
 ```
 
-## When to use `tokio::spawn` in gRPC handlers
-
-**Rule: only use `tokio::spawn` for streaming responses.**
-
-For streaming responses, the stream handle must be returned immediately while data production happens asynchronously. For non-streaming responses, await the operation directly.
-
-### Streaming response — use `tokio::spawn`
-
-```rust
-async fn get_instruments(
-    app: &Arc<AppContext>,
-    _request: (),
-) -> StreamedResponseWriter<InstrumentGrpcModel> {
-    let result = StreamedResponseWriter::new(1024);
-    let producer = result.get_stream_producer();
-
-    tokio::spawn(crate::flows::get_instruments(app.clone(), producer));
-
-    result
-}
-```
-
-The spawned function receives a `StreamedResponseProducer<T>`:
-
-```rust
-pub async fn get_instruments(
-    app: Arc<AppContext>,
-    producer: StreamedResponseProducer<InstrumentGrpcModel>,
-) {
-    let cache = app.trading_data_holder.lock().await;
-    for instrument in cache.instruments.get_all() {
-        producer.send(instrument.into()).await.unwrap();
-    }
-}
-```
-
-### Streaming input — no `tokio::spawn`
-
-```rust
-async fn post_bid_ask(
-    app: &Arc<AppContext>,
-    request: StreamedRequestReader<BidAskGrpcModel>,
-) {
-    let items = request.into_vec().await.unwrap();
-    crate::flows::handle_bid_ask(app, items).await;
-}
-```
-
-### Non-streaming response — no `tokio::spawn`
-
-```rust
-async fn close_position(
-    app: &Arc<AppContext>,
-    request: ClosePositionGrpcRequest,
-) -> ClosePositionGrpcResponse {
-    let result = crate::flows::close_position(app, request.account_id.into(), request.position_id.into()).await;
-    match result {
-        Ok(_) => ClosePositionGrpcResponse { result: MarginEngineGrpcResult::Ok.into() },
-        Err(err) => ClosePositionGrpcResponse { result: err.into() },
-    }
-}
-```
-
-### Summary
-
-| Case | `tokio::spawn`? |
-|------|----------------|
-| Streaming output (server → client) | **Yes** — must return stream handle immediately |
-| Streaming input (client → server) | No — collect with `request.into_vec().await` |
-| Non-streaming response | No — await directly |
+---
 
 ## Connecting to gRPC over SSH
 
