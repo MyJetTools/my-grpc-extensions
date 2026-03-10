@@ -5,7 +5,7 @@ Utilities and proc-macros that simplify building gRPC clients and servers on top
 ## Crates in this workspace
 - `my-grpc-extensions` – core helpers (channels, request builders with retries/background ping, streaming utilities, telemetry hooks, SSH/TLS support).
 - `my-grpc-client-macros` – `#[generate_grpc_client]` macro that builds strongly typed clients from your `.proto` with configurable retries/timeouts and optional per-method overrides.
-- `my-grpc-server-macros` – server-side macros (e.g., `#[with_telemetry]`) that inject telemetry context before you handle the request and helpers to send collections/streams.
+- `my-grpc-server-macros` – server-side macros that inject telemetry context and helpers to send collections/streams.
 
 ## Install
 Add from Git with the features you need:
@@ -65,101 +65,76 @@ impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
 }
 ```
 
-## Server macro quickstart
+## When to use `tokio::spawn` in gRPC handlers
 
-Wrap handlers with telemetry:
+**Rule: only use `tokio::spawn` for streaming responses.**
 
-```rust
-#[with_telemetry]
-async fn get(
-    &self,
-    request: tonic::Request<GetDocumentsRequest>,
-) -> Result<tonic::Response<Self::GetStream>, tonic::Status> {
-    let request = request.into_inner(); // telemetry is injected before this line
-    let result = crate::flows::get_docs(&self.app, request.client_id, request.doc_ids, my_telemetry).await;
-    my_grpc_extensions::grpc_server::send_vec_to_stream(result, |dto| dto).await
-}
-```
+For streaming responses, the stream handle must be returned immediately while data production happens asynchronously. For non-streaming responses, await the operation directly.
 
-Streaming helpers (server):
-- `send_single_item_to_stream`, `send_from_iterator`, `create_empty_stream`.
-- Enable `adjust-server-stream` to configure channel size and send timeouts.
-
-## Best Practice: When to Use `tokio::spawn` in gRPC Handlers
-
-**CRITICAL RULE**: Only use `tokio::spawn` when implementing gRPC functions that return **streaming responses**. For non-streaming responses, **generally** await the operation directly.
-
-**Note**: There may be exceptions to this rule for non-streaming responses. Any such exceptions will be documented at the application level (e.g., in application-specific documentation or rules).
-
-### Why This Matters
-
-For streaming responses, you must return the stream handle immediately to establish the connection. The actual data production happens asynchronously in the spawned task. For non-streaming responses, you should typically await the operation to ensure proper error handling and response timing. However, specific application requirements may necessitate spawning tasks for non-streaming responses in certain cases.
-
-### Streaming Response (Use `tokio::spawn`)
-
-The pattern for streaming responses uses `StreamedResponseWriter`:
-
-1. **Create** `StreamedResponseWriter` with a buffer size
-2. **Extract** the producer using `get_stream_producer()`
-3. **Pass** the producer to the spawned function
-4. **Return** the result using `get_result()` to establish the stream connection immediately
+### Streaming response — use `tokio::spawn`
 
 ```rust
-#[with_telemetry]
-async fn get_candles_by_instrument(
-    &self,
-    request: tonic::Request<GetCandlesHistoryGrpcRequest>,
-) -> Result<tonic::Response<Self::GetCandlesByInstrumentStream>, tonic::Status> {
-    let request = request.into_inner();
-    
-    // Step 1: Create StreamedResponseWriter
-    let mut result = StreamedResponseWriter::new(1024);
-    
-    // Step 2: Extract the producer
+async fn get_instruments(
+    app: &Arc<AppContext>,
+    _request: (),
+) -> StreamedResponseWriter<InstrumentGrpcModel> {
+    let result = StreamedResponseWriter::new(1024);
     let producer = result.get_stream_producer();
-    
-    // Step 3: Spawn the async work and pass the producer
-    tokio::spawn(crate::flows::get_candles(
-        self.app.clone(),
-        request.instrument_id,
-        request.from_key,
-        request.to_key,
-        request.is_bid,
-        candle_type,
-        request.limit.map(|x| x as usize),
-        producer,  // Producer passed to spawned function
-        my_telemetry.clone(),
-    ));
-    
-    // Step 4: Return the result immediately to establish stream connection
-    result.get_result()
+
+    tokio::spawn(crate::flows::get_instruments(app.clone(), producer));
+
+    result
 }
 ```
 
-### Non-Streaming Response (Do NOT use `tokio::spawn`)
+The spawned function receives a `StreamedResponseProducer<T>`:
 
 ```rust
-#[with_telemetry]
-async fn update_cache_from_db(
-    &self,
-    request: tonic::Request<UpdateCacheFromDbGrpcRequest>,
-) -> Result<tonic::Response<()>, tonic::Status> {
-    let request = request.into_inner();
-    
-    // Await directly - no tokio::spawn needed
-    crate::scripts::update_cache_from_db(self.app.as_ref(), &request.instrument_id)
-        .await
-        .map_err(|err| tonic::Status::internal(err))?;
-    
-    Ok(tonic::Response::new(()))
+pub async fn get_instruments(
+    app: Arc<AppContext>,
+    producer: StreamedResponseProducer<InstrumentGrpcModel>,
+) {
+    let cache = app.trading_data_holder.lock().await;
+    for instrument in cache.instruments.get_all() {
+        producer.send(instrument.into()).await.unwrap();
+    }
+}
+```
+
+### Streaming input — no `tokio::spawn`
+
+```rust
+async fn post_bid_ask(
+    app: &Arc<AppContext>,
+    request: StreamedRequestReader<BidAskGrpcModel>,
+) {
+    let items = request.into_vec().await.unwrap();
+    crate::flows::handle_bid_ask(app, items).await;
+}
+```
+
+### Non-streaming response — no `tokio::spawn`
+
+```rust
+async fn close_position(
+    app: &Arc<AppContext>,
+    request: ClosePositionGrpcRequest,
+) -> ClosePositionGrpcResponse {
+    let result = crate::flows::close_position(app, request.account_id.into(), request.position_id.into()).await;
+    match result {
+        Ok(_) => ClosePositionGrpcResponse { result: MarginEngineGrpcResult::Ok.into() },
+        Err(err) => ClosePositionGrpcResponse { result: err.into() },
+    }
 }
 ```
 
 ### Summary
 
-- ✅ **Streaming responses**: Use `tokio::spawn` to return the stream handle immediately
-- ✅ **Non-streaming responses (general rule)**: Await the operation directly - do NOT use `tokio::spawn`
-- ⚠️ **Non-streaming responses (exceptions)**: May use `tokio::spawn` in specific cases - check application-level documentation for exceptions
+| Case | `tokio::spawn`? |
+|------|----------------|
+| Streaming output (server → client) | **Yes** — must return stream handle immediately |
+| Streaming input (client → server) | No — collect with `request.into_vec().await` |
+| Non-streaming response | No — await directly |
 
 ## Connecting to gRPC over SSH
 
@@ -183,8 +158,7 @@ let ssh_credentials = my_grpc_extensions::my_ssh::SshCredentials::SshAgent {
 };
 
 grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
-grpc_client.set_ssh_sessions_pool(ssh_sessions_pool.clone()).await; // keep sessions reused
+grpc_client.set_ssh_sessions_pool(ssh_sessions_pool.clone()).await;
 ```
 
 SSH uses UNIX socket port-forwarding under the hood to reach the target gRPC endpoint behind the tunnel.
-
