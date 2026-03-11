@@ -244,3 +244,46 @@ grpc_client.set_ssh_sessions_pool(ssh_sessions_pool.clone()).await;
 ```
 
 SSH uses UNIX socket port-forwarding under the hood to reach the target gRPC endpoint behind the tunnel.
+
+---
+
+## Telemetry context in generated client methods
+
+When `service-sdk` is used with `grpc` feature, it pulls `my-grpc-extensions` with `with-telemetry` enabled. This means all generated client methods require a `&MyTelemetryContext` as second argument:
+
+```rust
+// Generated signature (with-telemetry enabled):
+pub async fn get_items(
+    &self,
+    input_data: (),
+    ctx: &my_telemetry::MyTelemetryContext,
+) -> Result<ItemGrpcModel, GrpcReadError>
+```
+
+When no telemetry context is available (e.g. in admin server functions), use `Empty`:
+
+```rust
+ctx.my_service
+    .get_items((), &service_sdk::my_telemetry::MyTelemetryContext::Empty)
+    .await
+    .map_err(|e| ServerFnError::new(format!("get_items failed: {:?}", e)))?
+```
+
+**Note on `map_err`**: Always include context describing what operation failed. Use `{:?}` (Debug) for `GrpcReadError` since it does not implement `Display`.
+
+## Streaming response
+
+For RPCs that return `stream T`, the generated method returns `StreamedResponse<T>`:
+
+```rust
+// Collect all items from stream into Vec
+let items = ctx.my_service
+    .get_items((), &service_sdk::my_telemetry::MyTelemetryContext::Empty)
+    .await
+    .map_err(|e| ServerFnError::new(format!("get_items gRPC call failed: {:?}", e)))?
+    .into_vec::<MyGrpcModel>()
+    .await
+    .map_err(|e| ServerFnError::new(format!("get_items stream read failed: {:?}", e)))?;
+```
+
+`into_vec::<TResult>()` requires `From<TItem>` for `TResult`. Use the same type (`TResult = TItem`) for identity conversion.
