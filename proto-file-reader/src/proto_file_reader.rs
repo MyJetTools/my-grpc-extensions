@@ -170,10 +170,17 @@ pub enum CurrentToken {
 pub fn into_snake_case(src: &str) -> String {
     let mut result = String::new();
 
-    for (index, ch) in src.chars().enumerate() {
+    let chars: Vec<char> = src.chars().collect();
+
+    for (index, &ch) in chars.iter().enumerate() {
         if ch.is_uppercase() {
             if index != 0 {
-                result.push('_');
+                let prev_upper = chars[index - 1].is_uppercase();
+                let next_is_lower = index + 1 < chars.len() && chars[index + 1].is_lowercase();
+
+                if !prev_upper || next_is_lower {
+                    result.push('_');
+                }
             }
 
             result.push(ch.to_lowercase().next().unwrap());
@@ -206,5 +213,10 @@ mod tests {
     #[test]
     fn test_into_camel_case() {
         assert_eq!(super::into_snake_case("HelloWorld"), "hello_world");
+    }
+
+    #[test]
+    fn test_several_capital() {
+        assert_eq!(super::into_snake_case("CreateCRMStatus"), "create_crm_status");
     }
 }

@@ -3,7 +3,6 @@ use std::{
     time::Duration,
 };
 
-use rust_extensions::chrono::format::Item;
 
 use crate::GrpcReadError;
 
