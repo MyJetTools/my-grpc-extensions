@@ -205,6 +205,59 @@ impl<'s> ProtoString<'s> {
     pub fn as_str(&'s self) -> &'s str {
         &self.0
     }
+
+    pub fn as_formatted_string(&'s self) -> String {
+        format_proto_param_name(self.0)
+    }
+}
+
+
+pub fn format_proto_param_name(src: &str)->String{
+    let mut result = String::with_capacity(src.len());
+
+    let mut prev: Option<char> = None;
+
+    let mut amount_of_upper_key = 0;
+    for c in src.chars(){
+
+        match prev{
+            Some(prev)=>{
+                
+                if prev.is_ascii_uppercase(){
+                    
+                    if c.is_ascii_lowercase(){
+                        if amount_of_upper_key>1{
+                        let c_prev = result.pop().unwrap();
+                        result.push(c_prev.to_ascii_uppercase());
+                    }
+                    }
+                    
+
+                    result.push(c.to_ascii_lowercase());
+                }else{                  
+
+                    result.push(c);    
+                }
+           
+            },
+            None=>{
+                result.push(c);
+            }
+        }
+
+        if c.is_ascii_uppercase(){
+            amount_of_upper_key +=1;
+        }else{
+            amount_of_upper_key +=0;
+        }
+
+         prev = Some(c);
+        
+    }
+
+
+    result
+
 }
 
 #[cfg(test)]
@@ -218,5 +271,12 @@ mod tests {
     #[test]
     fn test_several_capital() {
         assert_eq!(super::into_snake_case("CreateCRMStatus"), "create_crm_status");
+    }
+
+    #[test]
+    fn test_format_param_name() {
+        assert_eq!(super::format_proto_param_name("CreateCRMStatus"), "CreateCrmStatus");
+
+        assert_eq!(super::format_proto_param_name("HelloWorld"), "HelloWorld");
     }
 }

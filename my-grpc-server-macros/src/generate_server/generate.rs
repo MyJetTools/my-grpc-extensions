@@ -70,11 +70,13 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         let input_param = if let Some(input_param) = rpc.get_input_param() {
             match input_param {
                 proto_file_reader::ParamType::Single(tp_name) => {
-                    let tp_name = proc_macro2::TokenStream::from_str(tp_name).unwrap();
+                    let tp_name = proto_file_reader::format_proto_param_name(tp_name);
+                    let tp_name = proc_macro2::TokenStream::from_str(tp_name.as_str()).unwrap();
                     quote::quote! {tonic::Request<#tp_name>}
                 }
                 proto_file_reader::ParamType::Stream(tp_name) => {
-                    let tp_name = proc_macro2::TokenStream::from_str(tp_name).unwrap();
+                    let tp_name = proto_file_reader::format_proto_param_name(tp_name);
+                    let tp_name = proc_macro2::TokenStream::from_str(tp_name.as_str()).unwrap();
                     quote::quote! {tonic::Request<tonic::Streaming<#tp_name>>}
                 }
             }
@@ -87,18 +89,23 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         let (out_type, result_conversion) = if let Some(out_param) = rpc.get_output_param() {
             match out_param {
                 proto_file_reader::ParamType::Single(tp_name) => {
-                    let tp_name = proc_macro2::TokenStream::from_str(tp_name).unwrap();
+                        let tp_name = proto_file_reader::format_proto_param_name(tp_name);
+                    let tp_name = proc_macro2::TokenStream::from_str(&tp_name).unwrap();
                     (
                         quote::quote! {tonic::Response<#tp_name>},
                         quote::quote! {Ok(result.into())},
                     )
                 }
                 proto_file_reader::ParamType::Stream(tp_name) => {
-                    let fn_name_streamed = format!("{}Stream", fn_name_str.as_str());
+                    let tp_name = proto_file_reader::format_proto_param_name(tp_name);
+                    let tp_name = tp_name.as_str();
+
+                    let fn_name_streamed = format!("{}Stream",  fn_name_str.as_str());
 
                     stream_description = quote::quote! {
                          generate_server_stream!(stream_name: #fn_name_streamed, item_name: #tp_name);
                     };
+
 
                     let fn_name =
                         proc_macro2::TokenStream::from_str(fn_name_streamed.as_str()).unwrap();
