@@ -51,17 +51,14 @@ impl Drop for GrpcServerTelemetryContext {
 
         if let Some(ctx) = self.ctx.take() {
             if let Some(method) = method {
-                tokio::spawn(async move {
-                    my_telemetry::TELEMETRY_INTERFACE
+                my_telemetry::TELEMETRY_INTERFACE
                         .write_success(
                             &ctx,
                             started,
                             format!("GRPC: {}", method),
                             "done".to_string(),
                             tags,
-                        )
-                        .await;
-                });
+                );
             }
         }
     }
