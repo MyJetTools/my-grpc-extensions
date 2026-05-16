@@ -98,12 +98,9 @@ impl GrpcConnectUrl {
 
 impl Into<GrpcConnectUrl> for String {
     fn into(self) -> GrpcConnectUrl {
+        #[cfg(unix)]
         if self.starts_with("/") || self.starts_with("~/") {
-            #[cfg(unix)]
             return GrpcConnectUrl::new_as_unix_socket(self);
-
-            #[cfg(not(unix))]
-            panic!("Detected Unix socket [{}] is not supported.", self);
         }
 
         GrpcConnectUrl::new_as_tcp(self)
