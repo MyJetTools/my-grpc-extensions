@@ -144,7 +144,7 @@ impl GrpcChannelHolder {
         connect_url: impl Into<GrpcConnectUrl>,
         service_name: &'static str,
         request_timeout: Duration,
-        #[cfg(feature = "with-ssh")] ssh_target: crate::ssh::SshTargetInner,
+        #[cfg(all(unix, feature = "with-ssh"))] ssh_target: crate::ssh::SshTargetInner,
     ) -> Result<Channel, GrpcReadError> {
         let connect_url: GrpcConnectUrl = connect_url.into();
 
@@ -159,7 +159,7 @@ impl GrpcChannelHolder {
                 .await;
         }
 
-        #[cfg(feature = "with-ssh")]
+        #[cfg(all(unix, feature = "with-ssh"))]
         if let Some(ssh_credentials) = connect_url.get_ssh_credentials() {
             let grpc_service_endpoint = rust_extensions::remote_endpoint::RemoteEndpoint::try_parse(
                 connect_url.get_grpc_host(),

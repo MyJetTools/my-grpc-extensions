@@ -3,7 +3,7 @@ use std::fmt::Debug;
 pub enum GrpcConnectUrl {
     Tcp {
         raw: String,
-        #[cfg(feature = "with-ssh")]
+        #[cfg(all(unix, feature = "with-ssh"))]
         over_ssh: my_ssh::ssh_settings::OverSshConnectionSettings,
     },
     UnixSocket(String),
@@ -14,7 +14,7 @@ impl Debug for GrpcConnectUrl {
         match self {
             Self::Tcp {
                 raw,
-                #[cfg(feature = "with-ssh")]
+                #[cfg(all(unix, feature = "with-ssh"))]
                 over_ssh,
             } => f.debug_struct("Tcp").field("raw", raw).finish(),
             Self::UnixSocket(arg0) => f.debug_tuple("UnixSocket").field(arg0).finish(),
@@ -25,7 +25,7 @@ impl Debug for GrpcConnectUrl {
 impl GrpcConnectUrl {
     fn new_as_tcp(raw: String) -> Self {
         Self::Tcp {
-            #[cfg(feature = "with-ssh")]
+            #[cfg(all(unix, feature = "with-ssh"))]
             over_ssh: my_ssh::ssh_settings::OverSshConnectionSettings::parse(raw.as_str()),
             raw,
         }
@@ -36,7 +36,7 @@ impl GrpcConnectUrl {
         Self::UnixSocket(raw)
     }
 
-    #[cfg(not(feature = "with-ssh"))]
+    #[cfg(any(not(unix), not(feature = "with-ssh")))]
     pub fn get_grpc_host(&self) -> &str {
         match self {
             Self::Tcp { raw } => raw.as_str(),
@@ -44,7 +44,7 @@ impl GrpcConnectUrl {
         }
     }
 
-    #[cfg(feature = "with-ssh")]
+    #[cfg(all(unix, feature = "with-ssh"))]
     pub fn get_grpc_host(&self) -> &str {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.remote_resource_string.as_str(),
@@ -52,7 +52,7 @@ impl GrpcConnectUrl {
             Self::UnixSocket(raw) => &raw,
         }
     }
-    #[cfg(feature = "with-ssh")]
+    #[cfg(all(unix, feature = "with-ssh"))]
     pub fn get_ssh_credentials(&self) -> Option<&std::sync::Arc<my_ssh::SshCredentials>> {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.ssh_credentials.as_ref(),
@@ -62,7 +62,7 @@ impl GrpcConnectUrl {
         }
     }
 
-    #[cfg(feature = "with-ssh")]
+    #[cfg(all(unix, feature = "with-ssh"))]
     pub fn is_over_ssh(&self) -> bool {
         match self {
             Self::Tcp { over_ssh, .. } => over_ssh.ssh_credentials.is_some(),

@@ -55,7 +55,7 @@ pub struct GrpcChannelPool<TService: Send + Sync + 'static> {
     pub ping_interval: Duration,
     get_grpc_address: Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
-    #[cfg(feature = "with-ssh")]
+    #[cfg(all(unix, feature = "with-ssh"))]
     pub ssh_target: crate::SshTarget,
     enable_ping: Arc<UnsafeValue<bool>>,
 }
@@ -75,7 +75,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             ping_interval,
             get_grpc_address,
             service_factory,
-            #[cfg(feature = "with-ssh")]
+            #[cfg(all(unix, feature = "with-ssh"))]
             ssh_target: crate::SshTarget::new(),
             enable_ping: Arc::new(UnsafeValue::new(false)),
         };
@@ -97,13 +97,13 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             self.get_grpc_address.clone(),
             #[cfg(feature = "with-telemetry")]
             ctx.clone(),
-            #[cfg(feature = "with-ssh")]
+            #[cfg(all(unix, feature = "with-ssh"))]
             self.ssh_target.clone(),
         );
     }
 
     fn ping_channel(&self) {
-        #[cfg(feature = "with-ssh")]
+        #[cfg(all(unix, feature = "with-ssh"))]
         let ssh_target = self.ssh_target.clone();
         let enable_ping = self.enable_ping.clone();
         let ping_interval = self.ping_interval;
@@ -113,7 +113,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         let grpc_service_factory = self.service_factory.clone();
         let request_timeout = self.request_timeout;
         tokio::spawn(ping_loop(
-            #[cfg(feature = "with-ssh")]
+            #[cfg(all(unix, feature = "with-ssh"))]
             ssh_target,
             enable_ping,
             ping_interval,
@@ -127,7 +127,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
 }
 
 async fn get_or_create_channel<TService: Send + Sync + 'static>(
-    #[cfg(feature = "with-ssh")] ssh_target: &crate::SshTarget,
+    #[cfg(all(unix, feature = "with-ssh"))] ssh_target: &crate::SshTarget,
     grpc_channel_holder: &Arc<GrpcChannelHolder>,
     grpc_client_settings: &Arc<dyn GrpcClientSettings + Send + Sync + 'static>,
     grpc_service_factory: &Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
@@ -152,7 +152,7 @@ async fn get_or_create_channel<TService: Send + Sync + 'static>(
                     grpc_url.url,
                     grpc_service_factory.get_service_name(),
                     request_timeout,
-                    #[cfg(feature = "with-ssh")]
+                    #[cfg(all(unix, feature = "with-ssh"))]
                     ssh_target.get_value().await,
                 )
                 .await
@@ -161,7 +161,7 @@ async fn get_or_create_channel<TService: Send + Sync + 'static>(
 }
 
 async fn ping_loop<TService: Send + Sync + 'static>(
-    #[cfg(feature = "with-ssh")] ssh_target: crate::SshTarget,
+    #[cfg(all(unix, feature = "with-ssh"))] ssh_target: crate::SshTarget,
     enable_ping: Arc<UnsafeValue<bool>>,
     ping_interval: Duration,
     ping_timeout: Duration,
@@ -177,7 +177,7 @@ async fn ping_loop<TService: Send + Sync + 'static>(
         }
 
         let channel = get_or_create_channel(
-            #[cfg(feature = "with-ssh")]
+            #[cfg(all(unix, feature = "with-ssh"))]
             &ssh_target,
             &grpc_channel_holder,
             &grpc_client_settings,
