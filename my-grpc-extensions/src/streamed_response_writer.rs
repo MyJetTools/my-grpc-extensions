@@ -24,18 +24,28 @@ impl<TResult: Send + Sync + 'static> StreamedResponseWriter<TResult> {
         self
     }
 
-    pub async fn send(&self, itm: TResult) {
-        self.tx
+    pub async fn send(&self, itm: TResult) -> Result<(), String> {
+        if let Err(err) = self
+            .tx
             .send_timeout(Result::<_, tonic::Status>::Ok(itm), self.time_out)
             .await
-            .unwrap();
+        {
+            return Err(format!("{:?}", err));
+        }
+
+        Ok(())
     }
 
-    pub async fn send_error(&self, err: tonic::Status) {
-        self.tx
+    pub async fn send_error(&self, err: tonic::Status) -> Result<(), String> {
+        if let Err(err) = self
+            .tx
             .send_timeout(Result::<_, tonic::Status>::Err(err), self.time_out)
             .await
-            .unwrap();
+        {
+            return Err(format!("{:?}", err));
+        }
+
+        Ok(())
     }
 
     pub fn get_stream_producer(&self) -> StreamedResponseProducer<TResult> {
@@ -63,13 +73,12 @@ impl<TResult: Send + Sync + 'static> StreamedResponseWriter<TResult> {
     where
         TResult: Send + Sync + std::fmt::Debug + 'static,
     {
-        let rx = self.rx.take();
-
-        if rx.is_none() {
-            panic!("Result is already taken");
-        }
-
-        let rx = rx.unwrap();
+        let rx = match self.rx.take() {
+            Some(rx) => rx,
+            None => {
+                return Err(tonic::Status::internal("Result is already taken"));
+            }
+        };
 
         let output_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
         let response: Pin<
@@ -103,10 +112,15 @@ impl<TResult: Send + Sync + 'static> StreamedResponseProducer<TResult> {
         Ok(())
     }
 
-    pub async fn send_error(&self, err: tonic::Status) {
-        self.tx
+    pub async fn send_error(&self, err: tonic::Status) -> Result<(), String> {
+        if let Err(err) = self
+            .tx
             .send_timeout(Result::<_, tonic::Status>::Err(err), self.time_out)
             .await
-            .unwrap();
+        {
+            return Err(format!("{:?}", err));
+        }
+
+        Ok(())
     }
 }

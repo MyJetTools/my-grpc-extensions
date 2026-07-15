@@ -8,8 +8,8 @@ pub struct StreamedRequestProducer<TItem: Send + Sync + 'static + Clone> {
 }
 
 impl<TItem: Send + Sync + 'static + Clone> StreamedRequestProducer<TItem> {
-    pub async fn send(&self, item: TItem) {
-        self.inner.send(item).await;
+    pub async fn send(&self, item: TItem) -> Result<(), String> {
+        self.inner.send(item).await
     }
 }
 

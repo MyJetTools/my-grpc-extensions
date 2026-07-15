@@ -68,14 +68,17 @@ impl GrpcChannelHolder {
 
         let uri = Uri::from_str(format!("http://unix.socket{}", unix_socket_path).as_str());
 
-        if uri.is_err() {
-            panic!(
-                "Failed to create unix socket uri with path:{} for service {}",
-                unix_socket_path, service_name
-            );
-        }
+        let uri = match uri {
+            Ok(uri) => uri,
+            Err(err) => {
+                return Err(GrpcReadError::Other(format!(
+                    "Failed to create unix socket uri with path:{} for service {}. Err: {:?}",
+                    unix_socket_path, service_name, err
+                )));
+            }
+        };
 
-        let channel = Channel::builder(uri.unwrap())
+        let channel = Channel::builder(uri)
             .connect_with_connector(tower::service_fn(|uri: Uri| async move {
                 let unix_socket_path = uri.path();
                 println!("Grpc Client connecting to {}", unix_socket_path);
@@ -165,15 +168,16 @@ impl GrpcChannelHolder {
                 connect_url.get_grpc_host(),
             );
 
-            if grpc_service_endpoint.is_err() {
-                panic!(
-                    "Failed to parse grpc service endpoint: {} for service {}",
-                    connect_url.as_str(),
-                    service_name
-                );
-            }
-
-            let grpc_service_endpoint = grpc_service_endpoint.unwrap();
+            let grpc_service_endpoint = match grpc_service_endpoint {
+                Ok(grpc_service_endpoint) => grpc_service_endpoint,
+                Err(_) => {
+                    return Err(GrpcReadError::Other(format!(
+                        "Failed to parse grpc service endpoint: {} for service {}",
+                        connect_url.as_str(),
+                        service_name
+                    )));
+                }
+            };
 
             let unix_socket_name =
                 crate::ssh::generate_unix_socket_file(ssh_credentials, grpc_service_endpoint);
@@ -186,7 +190,7 @@ impl GrpcChannelHolder {
                     unix_socket_name.as_str(),
                     grpc_service_endpoint,
                 )
-                .await;
+                .await?;
 
             return self
                 .connect_to_unix_socket(unix_socket_name, service_name, request_timeout)
@@ -195,24 +199,16 @@ impl GrpcChannelHolder {
 
         let mut attempt_no = 0;
         loop {
-            let end_point = Channel::from_shared(connect_url.get_grpc_host().to_string());
-
-            if let Err(err) = end_point {
-                let msg = format!(
-                    "Failed to create channel with url:{}. Err: {:?}",
-                    connect_url.as_str(),
-                    err
-                );
-
-                println!("{}", msg);
-                panic!("{}", msg)
-            }
-
-            #[cfg(feature = "with-tls")]
-            let mut end_point = end_point.unwrap();
-
-            #[cfg(not(feature = "with-tls"))]
-            let end_point = end_point.unwrap();
+            let end_point = match Channel::from_shared(connect_url.get_grpc_host().to_string()) {
+                Ok(end_point) => end_point,
+                Err(err) => {
+                    return Err(GrpcReadError::Other(format!(
+                        "Failed to create channel with url:{}. Err: {:?}",
+                        connect_url.as_str(),
+                        err
+                    )));
+                }
+            };
 
             #[cfg(feature = "with-tls")]
             if connect_url.is_grpc_tls_endpoint() {
@@ -221,7 +217,10 @@ impl GrpcChannelHolder {
                 //    .ca_certificate(cert)
                 //    .domain_name(super::extract_domain_name(connect_url.as_str()));
                 // end_point = end_point.tls_config(tls).unwrap();
-                panic!("Tls not implemented yet");
+                return Err(GrpcReadError::Other(format!(
+                    "TLS is not implemented yet for endpoint: {}",
+                    connect_url.as_str()
+                )));
             }
 
             match tokio::time::timeout(request_timeout, end_point.connect()).await {

@@ -23,10 +23,13 @@ pub enum StreamedRequestInner<TItem: Clone> {
 }
 
 impl<TItem: Clone> StreamedRequestInner<TItem> {
-    pub async fn send(&self, item: TItem) {
+    pub async fn send(&self, item: TItem) -> Result<(), String> {
         match self {
             StreamedRequestInner::AsVec(_) => {
-                panic!("Can not enqueue new item to send to GRPC mode since it in Vector Mode");
+                return Err(
+                    "Can not enqueue new item to send to GRPC mode since it in Vector Mode"
+                        .to_string(),
+                );
             }
             StreamedRequestInner::AsStream(inner) => {
                 let mut write_access = inner.lock().await;
@@ -37,28 +40,28 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
                         has_end_of_stream,
                     } => {
                         if *has_end_of_stream {
-                            println!("StreamedRequestInner is ended");
-                            panic!("StreamedRequestInner is ended");
+                            return Err("StreamedRequestInner is ended".to_string());
                         }
                         items.push(item);
                     }
                     RequestAsStream::Initialized(sender) => match sender {
                         Some(sender) => {
-                            let err = sender.send(item).await;
-
-                            if let Err(err) = err {
-                                println!("Can not send grpc item to stream #1. Err: {}", err);
-                                return;
+                            if let Err(err) = sender.send(item).await {
+                                return Err(format!(
+                                    "Can not send grpc item to stream. Err: {}",
+                                    err
+                                ));
                             }
                         }
                         None => {
-                            println!("StreamedRequestInner is ended");
-                            panic!("StreamedRequestInner is ended");
+                            return Err("StreamedRequestInner is ended".to_string());
                         }
                     },
                 }
             }
         }
+
+        Ok(())
     }
 
     pub async fn set_sender(&self, sender: tokio::sync::mpsc::Sender<TItem>) {

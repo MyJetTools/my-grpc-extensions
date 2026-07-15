@@ -39,9 +39,9 @@ impl Interceptor for GrpcClientInterceptor {
         mut request: tonic::Request<()>,
     ) -> Result<tonic::Request<()>, tonic::Status> {
         if let Some(process_id) = self.to_string() {
-            request
-                .metadata_mut()
-                .insert("process-id", process_id.parse().unwrap());
+            if let Ok(process_id) = process_id.parse() {
+                request.metadata_mut().insert("process-id", process_id);
+            }
         }
 
         Ok(request)

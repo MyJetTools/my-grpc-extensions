@@ -4,6 +4,8 @@ use my_ssh::{SshPortForwardTunnel, SshSession};
 use rust_extensions::remote_endpoint::RemoteEndpoint;
 use tokio::sync::Mutex;
 
+use crate::GrpcReadError;
+
 lazy_static::lazy_static! {
     pub static ref PORT_FORWARDS_POOL: PortForwardsPool = PortForwardsPool::new();
 }
@@ -36,7 +38,7 @@ impl PortForwardsPool {
         ssh_session: Arc<SshSession>,
         unix_socket: &str,
         grpc_service_endpoint: RemoteEndpoint<'_>,
-    ) {
+    ) -> Result<(), GrpcReadError> {
         let id = format!(
             "{}->{}",
             ssh_session.get_ssh_credentials().to_string(),
@@ -44,18 +46,19 @@ impl PortForwardsPool {
         );
         let mut write_access = self.port_forwards.lock().await;
         if write_access.port_forwards.contains_key(id.as_str()) {
-            return;
+            return Ok(());
         }
 
-        let port = grpc_service_endpoint.get_port();
-
-        if port.is_none() {
-            panic!(
-                "Can not start port forward [{}]->[{}]. Port is not defined",
-                ssh_session.get_ssh_credentials().to_string(),
-                grpc_service_endpoint.as_str()
-            );
-        }
+        let port = match grpc_service_endpoint.get_port() {
+            Some(port) => port,
+            None => {
+                return Err(GrpcReadError::Other(format!(
+                    "Can not start port forward [{}]->[{}]. Port is not defined",
+                    ssh_session.get_ssh_credentials().to_string(),
+                    grpc_service_endpoint.as_str()
+                )));
+            }
+        };
 
         println!(
             "Starting port forward :[{}]->[{}]->[{}]",
@@ -68,25 +71,28 @@ impl PortForwardsPool {
             .start_port_forward(
                 unix_socket.to_string(),
                 grpc_service_endpoint.get_host().to_string(),
-                port.unwrap(),
+                port,
             )
             .await;
 
-        if let Err(err) = &result {
-            println!(
-                "Can not start port forward: [{}]->[{}]->[{}]. Error: {:?}",
-                unix_socket,
-                ssh_session.get_ssh_credentials().to_string(),
-                grpc_service_endpoint.as_str(),
-                err
-            );
-        }
-
-        let result = result.unwrap();
+        let result = match result {
+            Ok(result) => result,
+            Err(err) => {
+                return Err(GrpcReadError::Other(format!(
+                    "Can not start port forward: [{}]->[{}]->[{}]. Error: {:?}",
+                    unix_socket,
+                    ssh_session.get_ssh_credentials().to_string(),
+                    grpc_service_endpoint.as_str(),
+                    err
+                )));
+            }
+        };
 
         println!("Listening on {}", unix_socket);
         write_access
             .port_forwards
             .insert(unix_socket.to_string(), result);
+
+        Ok(())
     }
 }

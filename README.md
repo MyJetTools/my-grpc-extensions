@@ -218,6 +218,77 @@ impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
 
 ---
 
+## gRPC client pool (many instances of the same service)
+
+Use a **client pool** when you need multiple live instances of the *same* gRPC service, each addressed by a runtime key (`&str`) — for example sharded backends, per-tenant / per-node endpoints, or a dynamically discovered set of hosts. Clients are created **lazily** on first request and can be **garbage-collected** once a key is no longer relevant.
+
+Generate the pool with the `generate_grpc_client_pool` macro. It accepts the same parameters as `generate_grpc_client` and, alongside the per-instance `KeyValueGrpcClient`, emits a `KeyValueGrpcClientPool` (`{StructName}Pool`):
+
+```rust
+use my_grpc_client_macros::generate_grpc_client_pool;
+
+#[generate_grpc_client_pool(
+    proto_file: "./proto/KeyValueFlows.proto",
+    crate_ns: "crate::keyvalue_grpc",
+    retries: 3,
+    request_timeout_sec: 5,
+    ping_timeout_sec: 5,
+    ping_interval_sec: 5,
+)]
+pub struct KeyValueGrpcClient;
+```
+
+Because each pooled instance may point to a different endpoint, URLs are resolved through `GrpcClientPoolSettings` — the same idea as `GrpcClientSettings`, but it additionally receives the pool `id`:
+
+```rust
+#[async_trait::async_trait]
+impl my_grpc_extensions::GrpcClientPoolSettings for SettingsReader {
+    async fn get_grpc_url(
+        &self,
+        name: &'static str,
+        id: &str,
+    ) -> my_grpc_extensions::GrpcUrl {
+        if name == KeyValueGrpcClient::get_service_name() {
+            let read = self.settings.read().await;
+            // pick the endpoint for this specific pool id (shard / tenant / node)
+            return read.resolve_shard_url(id).into(); // String -> GrpcUrl
+        }
+        panic!("Unknown grpc service name: {}", name)
+    }
+}
+```
+
+Put the pool into your `AppContext` and pull clients by id — a missing id is created on demand:
+
+```rust
+pub struct AppContext {
+    pub key_value_pool: KeyValueGrpcClientPool,
+    // ...
+}
+
+// build once, from your settings reader (Arc<dyn GrpcClientPoolSettings>):
+let key_value_pool = KeyValueGrpcClientPool::new(settings.clone());
+
+// pull (or lazily create) the client for a given id:
+let client = app.key_value_pool.get_grpc_client("shard-1").await; // Arc<KeyValueGrpcClient>
+let item = client
+    .get((), &my_telemetry::MyTelemetryContext::Empty)
+    .await?;
+```
+
+### Garbage collecting stale clients
+
+Pass the set of ids that are still relevant; every client whose id is **not** in the list is dropped, and its background ping loop and channel are torn down:
+
+```rust
+// keep only the currently active shards; the rest are collected
+app.key_value_pool.gc(&["shard-1", "shard-2"]).await;
+```
+
+`get_grpc_client` returns `Arc<KeyValueGrpcClient>`, so calls that already hold the `Arc` keep working even if the id is collected concurrently — the underlying connection is released only once the last reference is dropped.
+
+---
+
 ## Connecting to gRPC over SSH
 
 Enable `with-ssh` and configure credentials/pool from `my-ssh`:

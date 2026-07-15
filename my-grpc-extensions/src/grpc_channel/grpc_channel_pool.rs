@@ -15,6 +15,7 @@ pub enum GrpcReadError {
     Timeout,
     TransportError(tonic::transport::Error),
     TonicStatus(tonic::Status),
+    Other(String),
 }
 
 #[async_trait::async_trait]

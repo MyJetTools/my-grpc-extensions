@@ -70,3 +70,50 @@ impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
 
 
 ```
+
+## Client pool (many instances of the same service)
+
+When you need several live instances of the same service, each addressed by a runtime key (`&str`) — sharded backends, per-tenant / per-node endpoints, discovered hosts — use `generate_grpc_client_pool`. It takes the same parameters as `generate_grpc_client` and additionally emits a `{StructName}Pool`:
+
+```rust
+use my_grpc_client_macros::generate_grpc_client_pool;
+
+#[generate_grpc_client_pool(
+    proto_file: "./proto/KeyValueFlows.proto",
+    crate_ns: "crate::keyvalue_grpc",
+    retries: 3,
+    request_timeout_sec: 5,
+    ping_timeout_sec: 5,
+    ping_interval_sec: 5,
+)]
+pub struct KeyValueGrpcClient;
+```
+
+Settings are resolved via `GrpcClientPoolSettings`, which also receives the pool `id`:
+
+```rust
+#[async_trait::async_trait]
+impl my_grpc_extensions::GrpcClientPoolSettings for SettingsReader {
+    async fn get_grpc_url(&self, name: &'static str, id: &str) -> my_grpc_extensions::GrpcUrl {
+        if name == KeyValueGrpcClient::get_service_name() {
+            let read_access = self.settings.read().await;
+            return read_access.resolve_shard_url(id).into();
+        }
+        panic!("Unknown grpc service name: {}", name)
+    }
+}
+```
+
+Generated pool API:
+
+```rust
+let pool = KeyValueGrpcClientPool::new(settings.clone()); // Arc<dyn GrpcClientPoolSettings>
+
+// lazily create / fetch a client for an id:
+let client = pool.get_grpc_client("shard-1").await;       // Arc<KeyValueGrpcClient>
+
+// garbage-collect every client whose id is not in the list
+// (drops the client and stops its background ping loop):
+pool.gc(&["shard-1", "shard-2"]).await;
+```
+

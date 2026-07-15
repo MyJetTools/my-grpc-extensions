@@ -31,7 +31,9 @@ impl<TItem> StreamedResponse<TItem> {
                 let item = TResult::from(item);
                 result = Some(item);
             } else {
-                panic!("Only single item is allowed");
+                return Err(GrpcReadError::Other(
+                    "Only single item is allowed".to_string(),
+                ));
             }
         }
 
