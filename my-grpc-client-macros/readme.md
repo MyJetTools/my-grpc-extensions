@@ -115,5 +115,10 @@ let client = pool.get_grpc_client("shard-1").await;       // Arc<KeyValueGrpcCli
 // garbage-collect every client whose id is not in the list
 // (drops the client and stops its background ping loop):
 pool.gc(&["shard-1", "shard-2"]).await;
+
+// ids currently held by the pool:
+let alive: Vec<String> = pool.get_ids().await;
 ```
+
+`{StructName}Pool` is an alias for `my_grpc_extensions::GrpcClientsPool<{StructName}>`; clients are stored in an `AHashMap` behind a `tokio::sync::Mutex` and created lazily on first `get_grpc_client`.
 

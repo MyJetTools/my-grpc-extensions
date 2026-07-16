@@ -283,9 +283,14 @@ Pass the set of ids that are still relevant; every client whose id is **not** in
 ```rust
 // keep only the currently active shards; the rest are collected
 app.key_value_pool.gc(&["shard-1", "shard-2"]).await;
+
+// ids currently held by the pool
+let alive: Vec<String> = app.key_value_pool.get_ids().await;
 ```
 
-`get_grpc_client` returns `Arc<KeyValueGrpcClient>`, so calls that already hold the `Arc` keep working even if the id is collected concurrently — the underlying connection is released only once the last reference is dropped.
+`get_grpc_client` returns `Arc<KeyValueGrpcClient>`, so calls that already hold the `Arc` keep working even if the id is collected concurrently — the underlying connection is released only once the last reference is dropped. Because a collected id is removed from the pool immediately, requesting it again creates a **new** client with a new connection.
+
+`{StructName}Pool` is an alias for `my_grpc_extensions::GrpcClientsPool<{StructName}>`, so you can also name it that way in signatures. The clients are kept in an `AHashMap` behind a `tokio::sync::Mutex`.
 
 ---
 

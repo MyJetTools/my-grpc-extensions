@@ -1,10 +1,15 @@
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use my_logger::LogEventCtx;
 #[cfg(feature = "with-telemetry")]
 use my_telemetry::MyTelemetryContext;
 
-use rust_extensions::UnsafeValue;
 use tokio::time::error::Elapsed;
 use tonic::transport::Channel;
 
@@ -58,7 +63,8 @@ pub struct GrpcChannelPool<TService: Send + Sync + 'static> {
     service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
     #[cfg(all(unix, feature = "with-ssh"))]
     pub ssh_target: crate::SshTarget,
-    enable_ping: Arc<UnsafeValue<bool>>,
+    enable_ping: Arc<AtomicBool>,
+    disposed: Arc<AtomicBool>,
 }
 
 impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
@@ -78,7 +84,8 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             service_factory,
             #[cfg(all(unix, feature = "with-ssh"))]
             ssh_target: crate::SshTarget::new(),
-            enable_ping: Arc::new(UnsafeValue::new(false)),
+            enable_ping: Arc::new(AtomicBool::new(false)),
+            disposed: Arc::new(AtomicBool::new(false)),
         };
 
         result.ping_channel();
@@ -90,7 +97,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         &self,
         #[cfg(feature = "with-telemetry")] ctx: &MyTelemetryContext,
     ) -> GrpcChannel<TService> {
-        self.enable_ping.set_value(true);
+        self.enable_ping.store(true, Ordering::Relaxed);
         return GrpcChannel::new(
             self.grpc_channel_holder.clone(),
             self.request_timeout,
@@ -107,6 +114,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
         #[cfg(all(unix, feature = "with-ssh"))]
         let ssh_target = self.ssh_target.clone();
         let enable_ping = self.enable_ping.clone();
+        let disposed = self.disposed.clone();
         let ping_interval = self.ping_interval;
         let ping_timeout = self.ping_timeout;
         let grpc_channel_holder = self.grpc_channel_holder.clone();
@@ -117,6 +125,7 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             #[cfg(all(unix, feature = "with-ssh"))]
             ssh_target,
             enable_ping,
+            disposed,
             ping_interval,
             ping_timeout,
             request_timeout,
@@ -124,6 +133,15 @@ impl<'s, TService: Send + Sync + 'static> GrpcChannelPool<TService> {
             grpc_client_settings,
             grpc_service_factory,
         ));
+    }
+}
+
+/// Ping loop is spawned as a detached task which does not hold the pool itself.
+/// Dropping the pool (i.e. when a pooled grpc client is garbage collected) raises the
+/// `disposed` flag, so the loop stops instead of reconnecting forever.
+impl<TService: Send + Sync + 'static> Drop for GrpcChannelPool<TService> {
+    fn drop(&mut self) {
+        self.disposed.store(true, Ordering::Relaxed);
     }
 }
 
@@ -163,7 +181,8 @@ async fn get_or_create_channel<TService: Send + Sync + 'static>(
 
 async fn ping_loop<TService: Send + Sync + 'static>(
     #[cfg(all(unix, feature = "with-ssh"))] ssh_target: crate::SshTarget,
-    enable_ping: Arc<UnsafeValue<bool>>,
+    enable_ping: Arc<AtomicBool>,
+    disposed: Arc<AtomicBool>,
     ping_interval: Duration,
     ping_timeout: Duration,
     request_timeout: Duration,
@@ -172,7 +191,11 @@ async fn ping_loop<TService: Send + Sync + 'static>(
     grpc_service_factory: Arc<dyn GrpcServiceFactory<TService> + Send + Sync + 'static>,
 ) {
     loop {
-        if !enable_ping.get_value() {
+        if disposed.load(Ordering::Relaxed) {
+            return;
+        }
+
+        if !enable_ping.load(Ordering::Relaxed) {
             tokio::time::sleep(ping_interval).await;
             continue;
         }

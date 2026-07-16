@@ -14,6 +14,7 @@ pub fn generate(
     input: proc_macro::TokenStream,
     with_telemetry: bool,
     with_ssh: bool,
+    as_pool: bool,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
 
     let ast: syn::DeriveInput = syn::parse(input).unwrap();
@@ -130,6 +131,64 @@ pub fn generate(
 
     let grpc_service_factory_name = proc_macro2::TokenStream::from_str(format!("{}GrpcServiceFactory", struct_name.to_string()).as_str()).unwrap() ;
 
+    let channel_pool = quote::quote!{
+        my_grpc_extensions::GrpcChannelPool::new(
+            settings,
+            std::sync::Arc::new(#grpc_service_factory_name),
+            std::time::Duration::from_secs(#timeout_sec),
+            std::time::Duration::from_secs(#ping_timeout_sec),
+            std::time::Duration::from_secs(#ping_interval_sec),
+        )
+    };
+
+    // A pooled client resolves its url through GrpcClientPoolSettings, which additionally gets the
+    // id of the client within the pool. The id is captured by the adapter, so everything below
+    // (channel, ping loop, generated methods) keeps working with a plain GrpcClientSettings.
+    let (fn_new, pool_tokens) = if as_pool {
+        let pool_name = proc_macro2::TokenStream::from_str(format!("{}Pool", struct_name.to_string()).as_str()).unwrap();
+
+        let fn_new = quote::quote!{
+            pub fn new(
+                settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientPoolSettings + Send + Sync + 'static>,
+                id: String,
+            ) -> Self {
+                let settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static> =
+                    std::sync::Arc::new(my_grpc_extensions::GrpcClientPoolSettingsAdapter::new(settings, id));
+
+                Self {
+                    settings: settings.clone(),
+                    channel: #channel_pool,
+                }
+            }
+        };
+
+        let pool_tokens = quote::quote!{
+            impl my_grpc_extensions::GrpcPooledClient for #struct_name {
+                fn new_pooled(
+                    settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientPoolSettings + Send + Sync + 'static>,
+                    id: String,
+                ) -> Self {
+                    Self::new(settings, id)
+                }
+            }
+
+            pub type #pool_name = my_grpc_extensions::GrpcClientsPool<#struct_name>;
+        };
+
+        (fn_new, pool_tokens)
+    } else {
+        let fn_new = quote::quote!{
+            pub fn new(settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>,) -> Self {
+                Self {
+                    settings: settings.clone(),
+                    channel: #channel_pool,
+                }
+            }
+        };
+
+        (fn_new, quote::quote!())
+    };
+
     Ok(quote::quote! {
 
         #(#use_name_spaces;)*
@@ -168,19 +227,7 @@ pub fn generate(
       }
 
       impl #struct_name{
-        pub fn new(settings: std::sync::Arc<dyn my_grpc_extensions::GrpcClientSettings + Send + Sync + 'static>,) -> Self {
-            Self {
-                settings: settings.clone(),
-                channel: my_grpc_extensions::GrpcChannelPool::new(
-                    settings,
-                    std::sync::Arc::new(#grpc_service_factory_name),
-                    std::time::Duration::from_secs(#timeout_sec),
-                    std::time::Duration::from_secs(#ping_timeout_sec),
-                    std::time::Duration::from_secs(#ping_interval_sec),
-                    
-                ),
-            }
-        }
+        #fn_new
 
         pub fn get_service_name() -> &'static str {
             #settings_service_name
@@ -188,12 +235,14 @@ pub fn generate(
 
         #ssh_impl
 
-        #(#grpc_methods)*  
+        #(#grpc_methods)*
       }
 
-      #(#interfaces)*  
+      #(#interfaces)*
 
       #ssh_trait
+
+      #pool_tokens
     }
     .into())
 }
