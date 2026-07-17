@@ -109,6 +109,23 @@ service_context.configure_grpc_server(|builder| {
 - `google.protobuf.Empty` input → `_request: ()`
 - Return type is the proto message directly (no `tonic::Response<T>` wrapper)
 
+### Types imported from another proto package
+
+The macro emits `use <crate_ns>::*;` and refers to message types by their **bare** name: the package
+qualifier of `returns (mt4_bridge.Mt4UserRecord)` is dropped and `Mt4UserRecord` is expected to live
+in `crate_ns`. That is what you want while every type comes from your own package - prost puts the
+whole package into the single module `crate_ns` points at.
+
+For a type coming from an **imported** proto with a different package, prost generates it into a
+different module, so the bare name does not resolve and you get a pile of `E0425`. Bring such types
+in with an explicit `use` - it takes precedence over the glob emitted by the macro:
+
+```rust
+use crate::mt4_bridge_grpc::Mt4UserRecord; // overrides the `use crate::router_grpc::*` glob
+
+generate_server!(proto_file: "./proto/Router.proto", crate_ns: "crate::router_grpc");
+```
+
 ---
 
 ## When to use `tokio::spawn` in gRPC handlers
@@ -206,10 +223,10 @@ Implement `GrpcClientSettings` to provide service URLs:
 ```rust
 #[async_trait::async_trait]
 impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
-    async fn get_grpc_url(&self, name: &'static str) -> String {
+    async fn get_grpc_url(&self, name: &'static str) -> my_grpc_extensions::GrpcUrl {
         if name == KeyValueGrpcClient::get_service_name() {
             let read = self.settings.read().await;
-            return read.key_value_grpc_url.clone();
+            return read.key_value_grpc_url.clone().into(); // String -> GrpcUrl
         }
         panic!("Unknown grpc service name: {}", name)
     }
@@ -266,7 +283,8 @@ pub struct AppContext {
     // ...
 }
 
-// build once, from your settings reader (Arc<dyn GrpcClientPoolSettings>):
+// build once, from your settings reader
+// (settings: Arc<dyn GrpcClientPoolSettings + Send + Sync + 'static>):
 let key_value_pool = KeyValueGrpcClientPool::new(settings.clone());
 
 // pull (or lazily create) the client for a given id:
@@ -278,7 +296,7 @@ let item = client
 
 ### Garbage collecting stale clients
 
-Pass the set of ids that are still relevant; every client whose id is **not** in the list is dropped, and its background ping loop and channel are torn down:
+Pass the set of ids that are still relevant; every client whose id is **not** in the list is removed from the pool. Removal drops the pool's own `Arc`, so once the last handed-out `Arc` is released the client is dropped and its background ping loop and channel are torn down:
 
 ```rust
 // keep only the currently active shards; the rest are collected

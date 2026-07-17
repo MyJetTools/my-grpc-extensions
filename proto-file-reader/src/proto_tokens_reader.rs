@@ -87,6 +87,97 @@ fn clean_up_comments(src: &str) -> Vec<&[u8]> {
     result
 }
 
+/// Blanks out `//` and `/* */` comments, keeping every other byte and all the line breaks at their
+/// positions. Content of double quoted strings is kept as is, so a `//` inside a string literal is
+/// not treated as a comment.
+pub fn strip_comments(src: &str) -> String {
+    let bytes = src.as_bytes();
+
+    let mut result = Vec::with_capacity(bytes.len());
+
+    let mut pos = 0;
+    let mut in_block_comment = false;
+    let mut in_string = false;
+
+    while pos < bytes.len() {
+        let b = bytes[pos];
+        let next = bytes.get(pos + 1).copied();
+
+        if b == b'\n' {
+            // Proto has no multiline string literals - an unterminated quote ends with the line.
+            in_string = false;
+            result.push(b);
+            pos += 1;
+            continue;
+        }
+
+        if in_block_comment {
+            if b == b'*' && next == Some(b'/') {
+                in_block_comment = false;
+                result.push(b' ');
+                result.push(b' ');
+                pos += 2;
+                continue;
+            }
+
+            result.push(b' ');
+            pos += 1;
+            continue;
+        }
+
+        if in_string {
+            if b == b'\\' {
+                result.push(b);
+                match next {
+                    Some(next) => {
+                        result.push(next);
+                        pos += 2;
+                    }
+                    None => pos += 1,
+                }
+                continue;
+            }
+
+            if b == b'"' {
+                in_string = false;
+            }
+
+            result.push(b);
+            pos += 1;
+            continue;
+        }
+
+        if b == b'"' {
+            in_string = true;
+            result.push(b);
+            pos += 1;
+            continue;
+        }
+
+        if b == b'/' && next == Some(b'/') {
+            while pos < bytes.len() && bytes[pos] != b'\n' {
+                result.push(b' ');
+                pos += 1;
+            }
+            continue;
+        }
+
+        if b == b'/' && next == Some(b'*') {
+            in_block_comment = true;
+            result.push(b' ');
+            result.push(b' ');
+            pos += 2;
+            continue;
+        }
+
+        result.push(b);
+        pos += 1;
+    }
+
+    // Every byte is either copied from src or an ascii space, and multibyte chars are copied as is.
+    String::from_utf8(result).unwrap()
+}
+
 #[cfg(test)]
 mod tests {
     use super::ProtoTokensReader;

@@ -58,10 +58,10 @@ When we implement the server part ping method usually looks like
 ```rust
 #[async_trait::async_trait]
 impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
-    async fn get_grpc_url(&self, name: &'static str) -> String {
+    async fn get_grpc_url(&self, name: &'static str) -> my_grpc_extensions::GrpcUrl {
         if name == KeyValueGrpcClient::get_service_name() {
             let read_access = self.settings.read().await;
-            return read_access.key_value_grpc_url.clone();
+            return read_access.key_value_grpc_url.clone().into(); // String -> GrpcUrl
         }
 
         panic!("Unknown grpc service name: {}", name)
