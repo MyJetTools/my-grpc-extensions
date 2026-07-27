@@ -39,13 +39,12 @@ impl PortForwardsPool {
         unix_socket: &str,
         grpc_service_endpoint: RemoteEndpoint<'_>,
     ) -> Result<(), GrpcReadError> {
-        let id = format!(
-            "{}->{}",
-            ssh_session.get_ssh_credentials().to_string(),
-            grpc_service_endpoint.as_str()
-        );
         let mut write_access = self.port_forwards.lock().await;
-        if write_access.port_forwards.contains_key(id.as_str()) {
+
+        // Unix socket path is generated out of the same ssh credentials and remote endpoint, so it
+        // identifies the tunnel. It is also the resource which is actually bound - starting the
+        // second forward on it would fight with the first one.
+        if write_access.port_forwards.contains_key(unix_socket) {
             return Ok(());
         }
 

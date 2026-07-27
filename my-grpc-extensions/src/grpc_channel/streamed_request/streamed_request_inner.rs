@@ -84,6 +84,22 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
                         items,
                         has_end_of_stream,
                     } => {
+                        if *has_end_of_stream {
+                            // Producer is done and the whole payload is still here - send a copy of
+                            // it and keep the items, so a retry sends exactly the same stream.
+                            // State stays NotInitialized, which keeps the request retryable.
+                            for itm in items.iter() {
+                                let err = sender.send(itm.clone()).await;
+                                if let Err(err) = err {
+                                    println!("Can not send grpc item to stream #2. Err: {}", err);
+                                    return;
+                                }
+                            }
+                            return;
+                        }
+
+                        // Producer is still alive: items are handed over to the consumer and are
+                        // not kept, so from now on the request can not be sent again.
                         for itm in items.drain(..) {
                             let err = sender.send(itm.clone()).await;
                             if let Err(err) = err {
@@ -91,17 +107,31 @@ impl<TItem: Clone> StreamedRequestInner<TItem> {
                                 return;
                             }
                         }
-                        if *has_end_of_stream {
-                            return;
-                        }
                     }
                     RequestAsStream::Initialized(existing_sender) => {
-                        // Allow re-binding sender for retries; drop old sender if present
+                        // Re-binding the consumer: the previous one is dropped, which closes its
+                        // stream. Whatever was already sent into it is gone.
                         *existing_sender = None;
                     }
                 }
 
                 *write_access = RequestAsStream::Initialized(Some(sender));
+            }
+        }
+    }
+
+    /// Tells whether the same request can be sent one more time.
+    ///
+    /// Vector mode keeps the items, so a retry sends exactly the same payload. Stream mode keeps
+    /// them only while no consumer is bound yet, or while the producer has finished before the
+    /// first attempt - once a live producer is bound to a consumer, the items are handed over and
+    /// a retry would send a stream with the items of the failed attempt missing.
+    pub async fn can_be_retried(&self) -> bool {
+        match self {
+            StreamedRequestInner::AsVec(_) => true,
+            StreamedRequestInner::AsStream(inner) => {
+                let read_access = inner.lock().await;
+                matches!(&*read_access, RequestAsStream::NotInitialized { .. })
             }
         }
     }

@@ -49,6 +49,12 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
             match result {
                 Ok(response) => return Ok(response),
                 Err(err) => {
+                    // The failed attempt could have consumed the items of a live input stream.
+                    // Retrying it would silently send an incomplete stream, so the error is returned as is.
+                    if !self.input_contract.can_be_retried().await {
+                        return Err(err);
+                    }
+
                     attempt_no += 1;
                     if attempt_no >= self.max_attempts_amount {
                         return Err(err);
@@ -86,6 +92,12 @@ impl<TService: Send + Sync + 'static, TRequest: Clone + Send + Sync + 'static>
                     ));
                 }
                 Err(err) => {
+                    // The failed attempt could have consumed the items of a live input stream.
+                    // Retrying it would silently send an incomplete stream, so the error is returned as is.
+                    if !self.input_contract.can_be_retried().await {
+                        return Err(err);
+                    }
+
                     attempt_no += 1;
                     if attempt_no >= self.max_attempts_amount {
                         return Err(err);
