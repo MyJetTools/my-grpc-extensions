@@ -51,6 +51,26 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         None => false,
     };
 
+    let with_error = params_list.try_get_named_param("with_error");
+
+    let with_error = match with_error {
+        Some(with_error) => {
+            let with_error = with_error.unwrap_as_value()?;
+            let with_error = with_error.unwrap_value()?;
+            let with_error = with_error.as_bool()?;
+            with_error.get_value()
+        }
+        None => false,
+    };
+
+    // Applies to unary responses only. A streamed response is already a Result - it is unwrapped by
+    // get_result() and must stay untouched no matter what the flag says.
+    let unary_result_conversion = if with_error {
+        quote::quote! {Ok(result?.into())}
+    } else {
+        quote::quote! {Ok(result.into())}
+    };
+
     let mut functions = Vec::new();
 
     for rpc in service_description.rpc.iter() {
@@ -93,7 +113,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
                     let tp_name = proc_macro2::TokenStream::from_str(&tp_name).unwrap();
                     (
                         quote::quote! {tonic::Response<#tp_name>},
-                        quote::quote! {Ok(result.into())},
+                        unary_result_conversion.clone(),
                     )
                 }
                 proto_file_reader::ParamType::Stream(tp_name) => {
@@ -118,7 +138,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         } else {
             (
                 quote::quote! {tonic::Response<()>},
-                quote::quote! {Ok(result.into())},
+                unary_result_conversion.clone(),
             )
         };
 

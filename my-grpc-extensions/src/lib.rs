@@ -1,6 +1,8 @@
 mod grpc_channel;
 #[cfg(feature = "with-telemetry")]
 mod grpc_client_interceptor;
+mod grpc_error;
+pub use grpc_error::*;
 pub mod grpc_server_streams;
 #[cfg(feature = "with-telemetry")]
 mod grpc_server_telemetry_context;

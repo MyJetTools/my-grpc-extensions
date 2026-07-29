@@ -109,6 +109,57 @@ service_context.configure_grpc_server(|builder| {
 - `google.protobuf.Empty` input → `_request: ()`
 - Return type is the proto message directly (no `tonic::Response<T>` wrapper)
 
+### `generate_server!` parameters
+
+| Parameter | Required | Default | Meaning |
+|---|---|---|---|
+| `proto_file` | yes | – | Path to the `.proto` file, relative to the crate root |
+| `crate_ns` | yes | – | Module where the tonic-generated code lives |
+| `grpc_struct_name` | no | `super::SdkGrpcService` | Struct the service trait is implemented for |
+| `with_telemetry` | no | `false` | Extract the telemetry context from the request metadata and pass it to every handler as the last argument (`ctx: &MyTelemetryContext`) |
+| `with_error` | no | `false` | Unary handlers return `Result<TResponse, GrpcError>` instead of a bare `TResponse` |
+
+### Returning an error from a handler: `with_error: true`
+
+By default a unary handler can only return the response message, so the only way out of a failure is
+a panic. With `with_error: true` every **unary** handler returns `Result<TResponse, GrpcError>`, and
+the generated code turns the error into a `tonic::Status` the caller receives as a gRPC code:
+
+```rust
+generate_server!(
+    proto_file: "./proto/MyService.proto",
+    crate_ns: "crate::my_service_grpc",
+    with_error: true
+);
+
+async fn get_user(
+    app: &Arc<AppContext>,
+    request: GetUserRequest,
+) -> Result<GetUserResponse, GrpcError> {
+    // GrpcReadError of a client call converts automatically, so a proxy handler is a one-liner
+    let user = app.mt4_bridge.get_user(request.into(), ctx).await?;
+    Ok(user.into())
+}
+```
+
+`GrpcError` wraps `tonic::Status`, so nothing is lost on the way up:
+
+- `GrpcError::unavailable(msg)`, `not_found(msg)`, `internal(msg)`, `invalid_argument(msg)` –
+  build an error by code; `GrpcError::new(status)` wraps a status you already have.
+- `From<tonic::Status>` and `From<GrpcError> for tonic::Status` – conversion both ways.
+- `From<GrpcReadError>` – what a generated **client** call returns:
+  `TonicStatus(s)` is passed through **as is** (the upstream code and message survive),
+  `Timeout` → `deadline_exceeded`, `TransportError` → `unavailable`, `Other(s)` → `internal`.
+
+Notes:
+
+- The flag lives on the macro call, not on a method, so the signatures of **all** unary handlers of
+  the service change at once.
+- **Streamed responses are not affected** by the flag - a handler returning `StreamedResponseWriter<T>`
+  keeps returning it directly, because it carries its own `tonic::Status` channel already.
+- Without the flag the generated code is exactly what it was before, so existing services keep
+  compiling untouched.
+
 ### Types imported from another proto package
 
 The macro emits `use <crate_ns>::*;` and refers to message types by their **bare** name: the package
