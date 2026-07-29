@@ -126,15 +126,19 @@ a panic. With `with_error: true` every **unary** handler returns `Result<TRespon
 the generated code turns the error into a `tonic::Status` the caller receives as a gRPC code:
 
 ```rust
+use my_grpc_extensions::GrpcError; // the server prelude does not bring the bare name into scope
+
 generate_server!(
     proto_file: "./proto/MyService.proto",
     crate_ns: "crate::my_service_grpc",
+    with_telemetry: true,
     with_error: true
 );
 
 async fn get_user(
     app: &Arc<AppContext>,
     request: GetUserRequest,
+    ctx: &MyTelemetryContext, // last argument, present because of with_telemetry
 ) -> Result<GetUserResponse, GrpcError> {
     // GrpcReadError of a client call converts automatically, so a proxy handler is a one-liner
     let user = app.mt4_bridge.get_user(request.into(), ctx).await?;
@@ -159,6 +163,9 @@ Notes:
   keeps returning it directly, because it carries its own `tonic::Status` channel already.
 - Without the flag the generated code is exactly what it was before, so existing services keep
   compiling untouched.
+- `with_error` composes with `with_telemetry`: the telemetry context stays the last argument of the
+  handler, before the return type changes. Mind that server telemetry currently reports every finished
+  request as a success, so a handler which returns an error is still written as `done`.
 
 ### Types imported from another proto package
 
