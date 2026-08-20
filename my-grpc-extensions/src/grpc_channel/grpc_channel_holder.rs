@@ -210,7 +210,7 @@ impl GrpcChannelHolder {
                 }
             };
 
-            #[cfg(feature = "with-tls")]
+            #[cfg(any(feature = "with-ring-tls", feature = "with-rust-tls"))]
             if connect_url.is_grpc_tls_endpoint() {
                 //let cert = Certificate::from_pem(my_tls::ALL_CERTIFICATES);
                 // let tls = ClientTlsConfig::new()

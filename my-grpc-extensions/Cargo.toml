@@ -10,7 +10,28 @@ default = []
 with-telemetry = ["dep:my-telemetry", "my-grpc-client-macros?/with-telemetry"]
 grpc-client = ["my-grpc-client-macros"]
 grpc-server = ["my-grpc-server-macros"]
-with-tls = ["my-tls"]
+# Links the TLS stack: my-tls / rustls, with **ring** as the rustls
+# CryptoProvider — hence `ring` in the name. Without a TLS feature no rustls /
+# webpki / ring crate enters the tree and `grpcs://` endpoints are rejected at
+# connect time.
+#
+# `my-tls/with-ring-crypto-providers` is part of it on purpose: my-tls leaves the
+# provider choice to the consumer, and with none installed its client-config and
+# key-parsing calls fail at connect time. Turning this on has to give a working
+# TLS, not a build that needs the caller to install a provider first.
+#
+# ring, not aws-lc-rs: no aws-lc-sys C build is inflicted on consumers. A caller
+# who wants a different provider should depend on my-tls directly without either
+# TLS feature and install their own.
+with-ring-tls = ["dep:my-tls", "my-tls/with-ring-crypto-providers"]
+# The pure-Rust alternative to `with-ring-tls`: same TLS functionality, no C
+# toolchain anywhere — rustls-graviola as the CryptoProvider. Trade-off: graviola
+# builds only on x86_64 and aarch64 and is far less widely deployed than ring, so
+# prefer `with-ring-tls` unless getting rid of the C toolchain is the point.
+#
+# The two are not mutually exclusive — everything gated on TLS in this crate is
+# `any(with-ring-tls, with-rust-tls)`; if both are on, my-tls picks ring.
+with-rust-tls = ["dep:my-tls", "my-tls/with-rust-crypto-providers"]
 
 with-ssh = ["my-ssh", "my-grpc-client-macros?/with-ssh"]
 

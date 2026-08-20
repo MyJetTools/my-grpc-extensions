@@ -24,7 +24,8 @@ Feature flags:
 - `grpc-server` – re-export `my-grpc-server-macros`.
 - `with-telemetry` – enables telemetry extraction/injection (requires `my-telemetry`).
 - `with-ssh` – connect through SSH port-forwarding using `my-ssh`.
-- `with-tls` – enable TLS support via `my-tls`.
+- `with-ring-tls` – enable TLS support via `my-tls`, rustls on the **ring** crypto provider.
+- `with-rust-tls` – the same, on the pure-Rust `rustls-graviola` provider (no C toolchain; x86_64/aarch64 only).
 - `adjust-server-stream` – customize gRPC server stream channel size/send timeout.
 
 ## Server quickstart

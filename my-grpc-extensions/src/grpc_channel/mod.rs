@@ -25,7 +25,7 @@ pub use grpc_connect_url::*;
 mod streamed_request;
 pub use streamed_request::*;
 
-#[cfg(feature = "with-tls")]
+#[cfg(any(feature = "with-ring-tls", feature = "with-rust-tls"))]
 fn extract_domain_name(src: &str) -> &str {
     let start = src.find("://").map(|index| index + 3).unwrap_or(0);
 
@@ -36,7 +36,7 @@ fn extract_domain_name(src: &str) -> &str {
 }
 
 #[cfg(test)]
-#[cfg(feature = "with-tls")]
+#[cfg(any(feature = "with-ring-tls", feature = "with-rust-tls"))]
 mod tests {
 
     #[test]
