@@ -15,7 +15,7 @@ pub fn generate_interfaces_implementations(
                 let input_param_type_token = get_name_fn_param_type_token(&input_param_type);
 
                 let output_param_type_token = proc_macro2::TokenStream::from_str(
-                    output_param_type.get_output_param_type().as_str(),
+                    output_param_type.get_output_param_type().as_ref(),
                 )
                 .unwrap();
 
@@ -122,7 +122,7 @@ pub fn generate_interfaces_implementations(
                 let input_param_type_token = quote::quote! {()};
 
                 let output_param_type_token = proc_macro2::TokenStream::from_str(
-                    output_param_type.get_output_param_type().as_str(),
+                    output_param_type.get_output_param_type().as_ref(),
                 )
                 .unwrap();
 

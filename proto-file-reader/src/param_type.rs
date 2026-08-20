@@ -1,4 +1,4 @@
-use rust_extensions::StrOrString;
+use std::borrow::Cow;
 
 #[derive(Debug)]
 pub enum ParamType<'s> {
@@ -55,7 +55,7 @@ impl<'s> ParamType<'s> {
         }
     }
 
-    pub fn get_output_param_type(&'s self) -> StrOrString<'s> {
+    pub fn get_output_param_type(&'s self) -> Cow<'s, str> {
         match self {
             Self::Single(name) => (*name).into(),
             Self::Stream(name) => format!("tonic::Streaming<{}>", name).into(),
