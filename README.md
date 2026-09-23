@@ -292,6 +292,41 @@ impl my_grpc_extensions::GrpcClientSettings for SettingsReader {
 }
 ```
 
+### Connect url formats
+
+| Form | What it does |
+|---|---|
+| `http://host:port` / `https://host:port` | Ordinary endpoint; the host is resolved through DNS. |
+| `http://server-name@ip[:port]` | **Pinned ip** — the socket goes to `ip`, but the request names `server-name`. |
+| `/path/to.sock`, `~/path/to.sock` | UNIX socket (unix only). |
+| `ssh://user@ssh-host:22->http://host:port` | Through an SSH tunnel; needs `with-ssh`. |
+
+#### Pinned ip (`server-name@ip`)
+
+Same spelling as in FlUrl. The ip is used **only** to open the socket — no DNS
+lookup happens for `server-name`, which stays the host of the url and therefore
+lands in h2's `:authority`:
+
+```rust
+// the socket goes to 10.0.0.7:8080, `:authority` says my-service.example.com
+return "http://my-service.example.com@10.0.0.7:8080".to_string().into();
+```
+
+This is what lets a reverse proxy sitting on that ip route the call: my-reverse-proxy
+picks its endpoint by `:authority` (falling back to the `Host` header for HTTP/1.1
+origin-form requests), so the server name has to travel with a request that was
+addressed to the proxy's ip.
+
+The port after the ip belongs to the url — `https://name@10.0.0.7:8443` connects to
+`10.0.0.7:8443` and names `name:8443`; with no port the scheme's default is used
+(80 / 443). IPv6 goes in brackets: `http://name@[2001:db8::1]:8080`. Malformed
+forms (no ip after `@`, a port before it, a host name instead of an ip) are
+rejected when the channel is created rather than silently resolved.
+
+Behind an SSH tunnel the pinned ip is what the tunnel forwards to, so
+`ssh://user@ssh-host:22->http://name@10.0.0.7:8080` makes the **ssh server** connect
+to `10.0.0.7:8080` instead of resolving `name` on its side.
+
 ---
 
 ## gRPC client pool (many instances of the same service)

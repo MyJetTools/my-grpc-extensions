@@ -24,6 +24,8 @@ mod grpc_connect_url;
 pub use grpc_connect_url::*;
 mod streamed_request;
 pub use streamed_request::*;
+mod resolved_ip;
+pub(crate) use resolved_ip::extract_resolved_ip;
 
 #[cfg(any(feature = "with-ring-tls", feature = "with-rust-tls"))]
 fn extract_domain_name(src: &str) -> &str {
