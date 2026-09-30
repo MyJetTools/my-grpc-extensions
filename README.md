@@ -225,6 +225,20 @@ pub async fn get_instruments(
 }
 ```
 
+The client tells a whole response from a cut one by how the stream ends:
+
+- clean end — every producer was dropped without a panic, and none of its sends timed out;
+- `Status::internal("stream producer stopped before finishing")` after the items already sent — a
+  producer panicked (the `unwrap()` above included), or one of its sends returned
+  `StreamedSendError::Timeout`.
+
+A timed-out send is final: the value is missing from the response, so stop producing. If the
+consumer is expected to be slow, raise the timeout (`new_with_timeout` / `set_timeout`) instead of
+retrying. Anything else that stops a producer — returning early on an error of its own, being
+cancelled by `select!` or `tokio::time::timeout` — looks like a normal finish, so report it with
+`producer.send_error(status)`. `StreamedSendError::Closed` means the client is gone: nothing more
+can be delivered.
+
 ### Streaming input — no `tokio::spawn`
 
 ```rust
