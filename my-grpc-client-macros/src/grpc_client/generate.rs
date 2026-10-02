@@ -30,6 +30,18 @@ pub fn generate(
 
 
 
+    // A misspelled optional parameter would otherwise be silently taken as "not set".
+    params_list.check_for_unknown_params(&[
+        "proto_file",
+        "crate_ns",
+        "retries",
+        "request_timeout_sec",
+        "ping_timeout_sec",
+        "ping_interval_sec",
+        "overrides",
+        "service_name",
+    ])?;
+
     let proto_file:String = params_list.get_named_param("proto_file")?.try_into()?;
 
 
@@ -102,7 +114,7 @@ pub fn generate(
         let ssh_impl = quote::quote!{
             pub async fn set_ssh_private_key_resolver(
                 &self,
-                resolver: std::sync::Arc<dyn my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>
+                resolver: std::sync::Arc<dyn my_grpc_extensions::my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>
             ) {
                 self.channel
                     .ssh_target
@@ -114,7 +126,7 @@ pub fn generate(
         let ssh_trait = quote::quote!{
             #[async_trait::async_trait]
             impl my_grpc_extensions::GrpcClientSsh for #struct_name {
-                async fn set_ssh_security_credentials_resolver(&self, resolver: std::sync::Arc<dyn my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>){
+                async fn set_ssh_security_credentials_resolver(&self, resolver: std::sync::Arc<dyn my_grpc_extensions::my_ssh::ssh_settings::SshSecurityCredentialsResolver + Send + Sync + 'static>){
                     self.channel
                     .ssh_target
                     .set_ssh_security_credentials_resolver(resolver)

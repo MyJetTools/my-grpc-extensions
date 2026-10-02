@@ -14,6 +14,15 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
         }
     };
 
+    // A misspelled optional parameter would otherwise be silently taken as "not set".
+    params_list.check_for_unknown_params(&[
+        "proto_file",
+        "crate_ns",
+        "grpc_struct_name",
+        "with_telemetry",
+        "with_error",
+    ])?;
+
     let proto_file = params_list.get_named_param("proto_file")?;
     let proto_file = proto_file.unwrap_any_value_as_str()?;
     let proto_file = proto_file.as_str()?;
@@ -66,9 +75,29 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
     // Applies to unary responses only. A streamed response is already a Result - it is unwrapped by
     // get_result() and must stay untouched no matter what the flag says.
     let unary_result_conversion = if with_error {
-        quote::quote! {Ok(result?.into())}
+        if with_telemetry {
+            // The error leaves the handler through `?`, so the telemetry context has to learn about
+            // it before that - otherwise the failed request is written as a success.
+            quote::quote! {
+                let result: Result<_, tonic::Status> = result.map_err(Into::into);
+                if let Err(status) = &result {
+                    my_telemetry_ctx.set_error(status);
+                }
+                Ok(result?.into())
+            }
+        } else {
+            quote::quote! {Ok(result?.into())}
+        }
     } else {
         quote::quote! {Ok(result.into())}
+    };
+
+    // The handler of a streamed response returns as soon as the stream is set up. The telemetry
+    // context goes into the stream, so the event is written when the response ends.
+    let stream_result_conversion = if with_telemetry {
+        quote::quote! {my_telemetry_ctx.track_stream(result.get_result())}
+    } else {
+        quote::quote! {result.get_result()}
     };
 
     let mut functions = Vec::new();
@@ -131,7 +160,7 @@ pub fn generate(input: proc_macro2::TokenStream) -> Result<proc_macro::TokenStre
                         proc_macro2::TokenStream::from_str(fn_name_streamed.as_str()).unwrap();
                     (
                         quote::quote! {tonic::Response<Self::#fn_name>},
-                        quote::quote! {result.get_result()},
+                        stream_result_conversion.clone(),
                     )
                 }
             }

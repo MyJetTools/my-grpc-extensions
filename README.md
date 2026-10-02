@@ -20,8 +20,8 @@ my-grpc-extensions = { tag = "x.x.x", git = "https://github.com/MyJetTools/my-gr
 ```
 
 Feature flags:
-- `grpc-client` – re-export `my-grpc-client-macros`.
-- `grpc-server` – re-export `my-grpc-server-macros`.
+- `grpc-client` – re-export `my-grpc-client-macros` as `my_grpc_extensions::client`.
+- `grpc-server` – re-export `my-grpc-server-macros` as `my_grpc_extensions::server`.
 - `with-telemetry` – enables telemetry extraction/injection (requires `my-telemetry`).
 - `with-ssh` – connect through SSH port-forwarding using `my-ssh`.
 - `with-ring-tls` – enable TLS support via `my-tls`, rustls on the **ring** crypto provider.
@@ -40,6 +40,23 @@ tonic = "*"
 futures-core = "*"
 ```
 
+The service in the `.proto` has to declare a `Ping` RPC, named exactly so:
+
+```proto
+import "google/protobuf/empty.proto";
+
+service MyService {
+    rpc ClosePosition(ClosePositionGrpcRequest) returns (ClosePositionGrpcResponse);
+    rpc GetInstruments(google.protobuf.Empty) returns (stream InstrumentGrpcModel);
+    rpc PostBidAsk(stream BidAskGrpcModel) returns (google.protobuf.Empty);
+    rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
+```
+
+`generate_server!` implements `Ping` itself - it answers with an empty message and asks for no
+handler. Without the RPC in the proto the macro does not compile: `E0407`, method `ping` is not a
+member of the service trait.
+
 ### 1. Module setup
 
 `src/grpc_server/mod.rs`:
@@ -48,7 +65,6 @@ use std::sync::Arc;
 use crate::app::AppContext;
 
 mod my_service_grpc_server;
-pub use my_service_grpc_server::*;
 
 // The struct the service trait is implemented for. `generate_server!` looks for it at
 // `super::SdkGrpcService` unless `grpc_struct_name` says otherwise, and hands its `app` field
@@ -69,7 +85,7 @@ impl SdkGrpcService {
 `src/grpc_server/my_service_grpc_server.rs`:
 ```rust
 use std::sync::Arc;
-use crate::{app::AppContext, models::FlowError};
+use crate::app::AppContext;
 
 // generate_server! and generate_server_stream!, which it expands to for a streamed response
 use my_grpc_extensions::server::*;
@@ -90,7 +106,7 @@ async fn close_position(
     request: ClosePositionGrpcRequest,  // request fields unwrapped — no tonic::Request<T>
 ) -> ClosePositionGrpcResponse {
     // await directly, no tokio::spawn
-    todo!()
+    crate::flows::close_position(app, request).await
 }
 
 // Streaming output (server → client): return StreamedResponseWriter<T>
@@ -150,6 +166,9 @@ tonic::transport::Server::builder()
 | `with_telemetry` | no | `false` | Extract the telemetry context from the request metadata and pass it to every handler as the last argument (`ctx: &MyTelemetryContext`). Needs the `with-telemetry` feature |
 | `with_error` | no | `false` | Unary handlers return `Result<TResponse, GrpcError>` instead of a bare `TResponse` |
 
+A parameter the macro does not know is a compile error pointing at it, so a misspelled
+`with_errors: true` is not silently taken as "not set".
+
 ### Returning an error from a handler: `with_error: true`
 
 By default a unary handler can only return the response message, so the only way out of a failure is
@@ -185,18 +204,42 @@ async fn get_user(
 - `From<GrpcReadError>` – what a generated **client** call returns:
   `TonicStatus(s)` is passed through **as is** (the upstream code and message survive),
   `Timeout` → `deadline_exceeded`, `TransportError` → `unavailable`, `Other(s)` → `internal`.
+  The cause of a `TransportError` names the address and the OS error, so it is written to the log
+  and the caller gets the bare `Upstream service is unavailable`.
 
 Notes:
 
 - The flag lives on the macro call, not on a method, so the signatures of **all** unary handlers of
   the service change at once.
-- **Streamed responses are not affected** by the flag - a handler returning `StreamedResponseWriter<T>`
-  keeps returning it directly, because it carries its own `tonic::Status` channel already.
-- Without the flag the generated code is exactly what it was before, so existing services keep
+- A handler with no response (`returns (google.protobuf.Empty)`) changes too - it returns
+  `Result<(), GrpcError>`. That includes a streaming-*input* method with an `Empty` response, such as
+  `post_bid_ask` above.
+- **Streamed output responses are not affected** by the flag - a handler returning
+  `StreamedResponseWriter<T>` keeps returning it directly, because it carries its own `tonic::Status`
+  channel already.
+- Without the flag a unary handler keeps returning the bare response, so existing services keep
   compiling untouched.
 - `with_error` composes with `with_telemetry`: the telemetry context stays the last argument of the
-  handler, before the return type changes. Mind that server telemetry currently reports every finished
-  request as a success, so a handler which returns an error is still written as `done`.
+  handler, before the return type changes, and a returned error is written to telemetry as a fail.
+
+### What is written to telemetry: `with_telemetry: true`
+
+The context is read from the `process-id` metadata of the request - one id, or several separated by
+commas. A segment which is not a number is skipped, and a header with no id in it gives an empty
+context, which writes nothing. Every other request writes one event named `GRPC: {RpcName}`, tagged
+with the ip of the caller when it is known:
+
+| How the request ended | Event |
+|---|---|
+| Handler returned a response | success, `done` |
+| Handler returned an error (`with_error: true`) | fail, `{Code}: {message}` - e.g. `NotFound: user not found` |
+| Handler panicked | fail, `Panic` |
+| Streamed response ended | success, `done` |
+| Streamed response yielded an error - `send_error`, or an aborted producer | fail, `{Code}: {message}` |
+
+The event of a streamed response is written when the stream ends, not when the handler returns, so
+its duration covers the whole response. A client which stops reading half-way ends the stream as
+well, and that is written as a success.
 
 ### Types imported from another proto package
 
@@ -300,8 +343,18 @@ async fn close_position(
 
 ## Client macro quickstart
 
+The client macros come with the `grpc-client` feature and are imported through
+`my_grpc_extensions::client` - `my-grpc-client-macros` itself is not a dependency of your crate. The
+code they expand to names `tonic` and `async_trait` by crate path, so both have to be dependencies
+of your crate next to `my-grpc-extensions`:
+
+```toml
+tonic = "*"
+async-trait = "*"
+```
+
 ```rust
-use my_grpc_client_macros::generate_grpc_client;
+use my_grpc_extensions::client::generate_grpc_client;
 
 #[generate_grpc_client(
     proto_file: "./proto/KeyValueFlows.proto",
@@ -319,7 +372,15 @@ Parameters:
 - `proto_file` – path to your proto file; `crate_ns` – module where tonic-generated code lives.
 - `retries` – reconnect/retry attempts on disconnect; `request_timeout_sec` – per-request timeout.
 - `ping_timeout_sec` / `ping_interval_sec` – background ping used to detect drops and reconnect.
-- `overrides` – per-method retry/timeouts if needed.
+- `overrides` – per-method `retries`, as `[{ fn_name: "Get", retries: 2 }]`.
+- `service_name` – optional; the name `get_grpc_url` is asked with. The struct name by default.
+
+A parameter the macro does not know is a compile error pointing at it.
+
+The service in the `.proto` has to declare
+`rpc Ping(google.protobuf.Empty) returns (google.protobuf.Empty);`, named exactly so - it is what the
+background ping calls. No client method is generated for it. Without the RPC in the proto the macro
+does not compile: `E0599`, no method named `ping`.
 
 Implement `GrpcClientSettings` to provide service URLs:
 
@@ -380,7 +441,7 @@ Use a **client pool** when you need multiple live instances of the *same* gRPC s
 Generate the pool with the `generate_grpc_client_pool` macro. It accepts the same parameters as `generate_grpc_client` and, alongside the per-instance `KeyValueGrpcClient`, emits a `KeyValueGrpcClientPool` (`{StructName}Pool`):
 
 ```rust
-use my_grpc_client_macros::generate_grpc_client_pool;
+use my_grpc_extensions::client::generate_grpc_client_pool;
 
 #[generate_grpc_client_pool(
     proto_file: "./proto/KeyValueFlows.proto",
@@ -452,7 +513,7 @@ let alive: Vec<String> = app.key_value_pool.get_ids().await;
 
 ## Connecting to gRPC over SSH
 
-Enable `with-ssh` and configure credentials/pool from `my-ssh`:
+Enable `with-ssh` (unix only):
 
 ```toml
 my-grpc-extensions = { tag = "x.x.x", git = "https://github.com/MyJetTools/my-grpc-extensions.git", features = [
@@ -461,21 +522,59 @@ my-grpc-extensions = { tag = "x.x.x", git = "https://github.com/MyJetTools/my-gr
 ] }
 ```
 
+The tunnel is described by the url itself: return `ssh://user@ssh-host:22->http://host:port` from
+`get_grpc_url` (see [Connect url formats](#connect-url-formats)). Nothing else has to be set on the
+client - the ssh session is taken from the pool `my-ssh` keeps for the whole process
+(`my_ssh::SSH_SESSIONS_POOL`) and is authenticated through the **ssh agent**.
+
+### Authenticating with a private key
+
+To use a private key instead of the ssh agent, give the client a resolver. It is asked with the ssh
+part of the url, written as `user@host:port`:
+
 ```rust
-let grpc_settings = GrpcLogSettings::new(over_ssh_connection.remote_resource_string);
-let grpc_client = MyLoggerGrpcClient::new(Arc::new(grpc_settings));
+use std::sync::Arc;
+use my_grpc_extensions::my_ssh::ssh_settings::{SshPrivateKey, SshSecurityCredentialsResolver};
 
-let ssh_credentials = my_grpc_extensions::my_ssh::SshCredentials::SshAgent {
-    ssh_remote_host: "ssh_host".to_string(),
-    ssh_remote_port: 22,
-    ssh_user_name: "user".to_string(),
-};
+pub struct SshKeys {
+    pub private_key: String, // the key itself, not a path to it
+}
 
-grpc_client.set_ssh_credentials(Arc::new(ssh_credentials)).await;
-grpc_client.set_ssh_sessions_pool(ssh_sessions_pool.clone()).await;
+#[async_trait::async_trait]
+impl SshSecurityCredentialsResolver for SshKeys {
+    async fn resolve_ssh_private_key(&self, ssh_line: &str) -> Option<SshPrivateKey> {
+        if ssh_line == "user@ssh-host:22" {
+            return Some(SshPrivateKey {
+                content: self.private_key.clone(),
+                pass_phrase: None,
+            });
+        }
+        None // no key for this host - the ssh agent is used
+    }
+
+    // Required by the trait, never called by the gRPC client: a tunnel is authenticated
+    // with a private key or through the ssh agent, not with a password.
+    async fn resolve_ssh_password(&self, _ssh_line: &str) -> Option<String> {
+        None
+    }
+}
+
+let grpc_client = KeyValueGrpcClient::new(settings);
+grpc_client.set_ssh_private_key_resolver(Arc::new(ssh_keys)).await; // ssh_keys: SshKeys
 ```
 
-SSH uses UNIX socket port-forwarding under the hood to reach the target gRPC endpoint behind the tunnel.
+Set the resolver before the first request: the tunnel is started once per url for the whole process
+and keeps the session it was started with. A client pool has no setter of its own - the resolver is
+set on each client `get_grpc_client` returns.
+
+Every generated client also implements `my_grpc_extensions::GrpcClientSsh`, whose
+`set_ssh_security_credentials_resolver` does the same - use it where the code setting the resolver is
+generic over the client type.
+
+Under the hood the client listens on a local UNIX socket -
+`$HOME/grpc-{user}-{ssh_host}_{ssh_port}--{host}_{port}.sock`, `/tmp` instead of `$HOME` when it is not
+set - which `my-ssh` forwards to `host:port` on the far side of the tunnel, and connects to that
+socket.
 
 ---
 

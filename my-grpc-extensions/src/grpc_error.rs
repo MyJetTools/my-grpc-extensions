@@ -1,3 +1,5 @@
+use my_logger::LogEventCtx;
+
 use crate::GrpcReadError;
 
 /// Error a gRPC server handler is allowed to return when `generate_server!` is invoked with
@@ -8,9 +10,11 @@ use crate::GrpcReadError;
 /// original code and message. The generated handler converts it back into `tonic::Status` with `?`.
 ///
 /// ```ignore
+/// // generate_server!(.., with_telemetry: true, with_error: true)
 /// async fn get_user(
 ///     app: &Arc<AppContext>,
 ///     request: GetUserRequest,
+///     ctx: &MyTelemetryContext, // present because of with_telemetry
 /// ) -> Result<GetUserResponse, GrpcError> {
 ///     // GrpcReadError of the client call is converted automatically
 ///     let user = app.mt4_bridge.get_user(request.into(), ctx).await?;
@@ -78,7 +82,15 @@ impl From<GrpcReadError> for GrpcError {
             GrpcReadError::TonicStatus(status) => Self(status),
             GrpcReadError::Timeout => Self(tonic::Status::deadline_exceeded("Grpc request timeout")),
             GrpcReadError::TransportError(err) => {
-                Self(tonic::Status::unavailable(format!("Transport error: {}", err)))
+                // Display of a transport error is the bare "transport error" - the cause is in Debug
+                // only. It names the address and the OS error, so it goes to the log and stays
+                // away from the status which travels to the caller.
+                my_logger::LOGGER.write_error(
+                    "GrpcError::from",
+                    format!("Transport error: {:?}", err),
+                    LogEventCtx::new(),
+                );
+                Self(tonic::Status::unavailable("Upstream service is unavailable"))
             }
             GrpcReadError::Other(msg) => Self(tonic::Status::internal(msg)),
         }
@@ -104,3 +116,31 @@ impl std::fmt::Display for GrpcError {
 }
 
 impl std::error::Error for GrpcError {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_transport_error_keeps_its_cause_out_of_the_status() {
+        // Nothing listens there, so the connect is refused.
+        let err = tonic::transport::Endpoint::from_static("http://127.0.0.1:1")
+            .connect()
+            .await
+            .unwrap_err();
+
+        let err: GrpcError = GrpcReadError::TransportError(err).into();
+
+        assert_eq!(err.code(), tonic::Code::Unavailable);
+        assert_eq!(err.message(), "Upstream service is unavailable");
+    }
+
+    #[test]
+    fn test_upstream_status_is_passed_through() {
+        let err: GrpcError =
+            GrpcReadError::TonicStatus(tonic::Status::not_found("user 42")).into();
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        assert_eq!(err.message(), "user 42");
+    }
+}

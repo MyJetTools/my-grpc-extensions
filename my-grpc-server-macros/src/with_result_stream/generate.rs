@@ -7,6 +7,8 @@ pub fn generate(
     let tokens: proc_macro2::TokenStream = attr.into();
     let params_list = TokensObject::new(tokens.into())?;
 
+    params_list.check_for_unknown_params(&["item_name"])?;
+
     let item_name: &str = params_list
         .get_value_from_single_or_named("item_name")?
         .try_into()?;

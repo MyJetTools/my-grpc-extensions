@@ -20,6 +20,8 @@ impl<'s> FnOverride<'s> {
         let mut result = HashMap::new();
 
         for item in overrides.iter() {
+            item.check_for_unknown_params(&["fn_name", "retries"])?;
+
             let name: String = item.get_named_param("fn_name")?.try_into()?;
 
             let retries: usize = item.get_named_param("retries")?.try_into()?;
