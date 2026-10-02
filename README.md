@@ -30,14 +30,38 @@ Feature flags:
 
 ## Server quickstart
 
+`generate_server!` (feature `grpc-server`) implements the tonic service trait for a struct of yours and
+forwards every RPC to a plain async fn you write. The code it expands to names `tonic` and - for an
+RPC which returns a stream - `futures_core` by crate path, so both have to be dependencies of your
+crate next to `my-grpc-extensions`:
+
+```toml
+tonic = "*"
+futures-core = "*"
+```
+
 ### 1. Module setup
 
 `src/grpc_server/mod.rs`:
 ```rust
+use std::sync::Arc;
+use crate::app::AppContext;
+
 mod my_service_grpc_server;
 pub use my_service_grpc_server::*;
 
-service_sdk::macros::use_grpc_server!();
+// The struct the service trait is implemented for. `generate_server!` looks for it at
+// `super::SdkGrpcService` unless `grpc_struct_name` says otherwise, and hands its `app` field
+// to every handler.
+pub struct SdkGrpcService {
+    pub app: Arc<AppContext>,
+}
+
+impl SdkGrpcService {
+    pub fn new(app: Arc<AppContext>) -> Self {
+        Self { app }
+    }
+}
 ```
 
 ### 2. Server implementation file
@@ -47,7 +71,9 @@ service_sdk::macros::use_grpc_server!();
 use std::sync::Arc;
 use crate::{app::AppContext, models::FlowError};
 
-service_sdk::macros::use_grpc_server!();
+// generate_server! and generate_server_stream!, which it expands to for a streamed response
+use my_grpc_extensions::server::*;
+use my_grpc_extensions::{StreamedRequestReader, StreamedResponseWriter};
 
 // Macro reads the proto file and generates the server boilerplate.
 // You implement one plain async fn per RPC method.
@@ -95,12 +121,16 @@ mod my_service_grpc {
     tonic::include_proto!("my_service");  // package name from proto file
 }
 
+use grpc_server::SdkGrpcService;
 use my_service_grpc::my_service_server::*;
 
-// In main():
-service_context.configure_grpc_server(|builder| {
-    builder.add_grpc_service(MyServiceServer::new(SdkGrpcService::new(app.clone())))
-});
+// In main(): SdkGrpcService now implements the tonic service trait,
+// so it goes into a tonic server like any other tonic service
+tonic::transport::Server::builder()
+    .add_service(MyServiceServer::new(SdkGrpcService::new(app.clone())))
+    .serve(addr) // addr: std::net::SocketAddr
+    .await
+    .unwrap();
 ```
 
 ### Key rules
@@ -117,7 +147,7 @@ service_context.configure_grpc_server(|builder| {
 | `proto_file` | yes | – | Path to the `.proto` file, relative to the crate root |
 | `crate_ns` | yes | – | Module where the tonic-generated code lives |
 | `grpc_struct_name` | no | `super::SdkGrpcService` | Struct the service trait is implemented for |
-| `with_telemetry` | no | `false` | Extract the telemetry context from the request metadata and pass it to every handler as the last argument (`ctx: &MyTelemetryContext`) |
+| `with_telemetry` | no | `false` | Extract the telemetry context from the request metadata and pass it to every handler as the last argument (`ctx: &MyTelemetryContext`). Needs the `with-telemetry` feature |
 | `with_error` | no | `false` | Unary handlers return `Result<TResponse, GrpcError>` instead of a bare `TResponse` |
 
 ### Returning an error from a handler: `with_error: true`
@@ -451,7 +481,7 @@ SSH uses UNIX socket port-forwarding under the hood to reach the target gRPC end
 
 ## Telemetry context in generated client methods
 
-When `service-sdk` is used with `grpc` feature, it pulls `my-grpc-extensions` with `with-telemetry` enabled. This means all generated client methods require a `&MyTelemetryContext` as second argument:
+The `with-telemetry` feature changes what the client macros generate: with it all generated client methods require a `&MyTelemetryContext` as second argument, without it the argument is not generated at all:
 
 ```rust
 // Generated signature (with-telemetry enabled):
@@ -460,13 +490,27 @@ pub async fn get_items(
     input_data: (),
     ctx: &my_telemetry::MyTelemetryContext,
 ) -> Result<ItemGrpcModel, GrpcReadError>
+
+// Generated signature (with-telemetry disabled):
+pub async fn get_items(
+    &self,
+    input_data: (),
+) -> Result<ItemGrpcModel, GrpcReadError>
+```
+
+Cargo unifies features across the whole build, so the argument appears as soon as any crate of your dependency graph enables `with-telemetry` on `my-grpc-extensions`, not only your own `Cargo.toml`.
+
+The generated code names `my_telemetry` by crate path and `my-grpc-extensions` does not re-export it, so `my-telemetry` has to be a dependency of your crate. Take the tag `my-grpc-extensions` itself depends on, so that both resolve to the same crate and `MyTelemetryContext` stays one type:
+
+```toml
+my-telemetry = { tag = "x.x.x", git = "https://github.com/MyJetTools/my-telemetry.git" }
 ```
 
 When no telemetry context is available (e.g. in admin server functions), use `Empty`:
 
 ```rust
 ctx.my_service
-    .get_items((), &service_sdk::my_telemetry::MyTelemetryContext::Empty)
+    .get_items((), &my_telemetry::MyTelemetryContext::Empty)
     .await
     .map_err(|e| ServerFnError::new(format!("get_items failed: {:?}", e)))?
 ```
@@ -480,7 +524,7 @@ For RPCs that return `stream T`, the generated method returns `StreamedResponse<
 ```rust
 // Collect all items from stream into Vec
 let items = ctx.my_service
-    .get_items((), &service_sdk::my_telemetry::MyTelemetryContext::Empty)
+    .get_items((), &my_telemetry::MyTelemetryContext::Empty)
     .await
     .map_err(|e| ServerFnError::new(format!("get_items gRPC call failed: {:?}", e)))?
     .into_vec::<MyGrpcModel>()
