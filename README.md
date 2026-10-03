@@ -226,8 +226,9 @@ Notes:
 
 The context is read from the `process-id` metadata of the request - one id, or several separated by
 commas. A segment which is not a number is skipped, and a header with no id in it gives an empty
-context, which writes nothing. Every other request writes one event named `GRPC: {RpcName}`, tagged
-with the ip of the caller when it is known:
+context, which writes nothing. Every other request writes an event named `GRPC: {RpcName}` for each
+id of the context - `process-id: 7,8` writes two, one per id - tagged with the ip of the caller when
+it is known:
 
 | How the request ended | Event |
 |---|---|
@@ -240,6 +241,82 @@ with the ip of the caller when it is known:
 The event of a streamed response is written when the stream ends, not when the handler returns, so
 its duration covers the whole response. A client which stops reading half-way ends the stream as
 well, and that is written as a success.
+
+### Telemetry in a handwritten handler: `#[with_telemetry]`
+
+A handler you write yourself - a method of the tonic service trait rather than one `generate_server!`
+generates - gets the same context with the `#[with_telemetry]` attribute
+(`my_grpc_extensions::server::with_telemetry`; features `grpc-server` and `with-telemetry`). It puts
+two lines in front of `let request = request.into_inner();` in the body (`let _request = …` and
+`let mut request = …` work too):
+
+```rust
+let my_telemetry_ctx = my_grpc_extensions::get_telemetry(
+    &request.metadata(),
+    request.remote_addr(),
+    "get_user", // the name of the handler function
+);
+let my_telemetry = my_telemetry_ctx.get_ctx();
+```
+
+From there on `my_telemetry: &MyTelemetryContext` is the context to pass to the calls the handler
+makes, and `my_telemetry_ctx` writes the event `GRPC: {handler_fn_name}` when it is dropped. A body
+without such a line does not compile: the attribute stops with
+`Could not find 'let request = request.into_inner()' in fn body`.
+
+Unlike `generate_server!`, the attribute does not see what the handler returns, so two things are
+left to the handler:
+
+- **An error is written as a success** (`done`) unless the handler marks it:
+  `my_telemetry_ctx.set_error(&status)` before it returns `Err(status)`.
+- **The event of a streamed response is written when the handler returns**, not when the stream
+  ends, unless the response is handed to `my_telemetry_ctx.track_stream(result)`. That also writes an
+  `Err`, or a stream which yields an error, as a fail. It takes the context by value, so make it the
+  last expression of the handler.
+
+A panic in the handler is written as a fail, `Panic`, without anything from the handler.
+
+```rust
+use my_grpc_extensions::server::with_telemetry;
+use my_grpc_extensions::StreamedResponseWriter;
+
+#[tonic::async_trait]
+impl users_server::Users for GrpcService {
+    #[with_telemetry]
+    async fn get_user(
+        &self,
+        request: tonic::Request<GetUserRequest>,
+    ) -> Result<tonic::Response<UserGrpcModel>, tonic::Status> {
+        let request = request.into_inner();
+
+        match self.app.users.get(&request.id, my_telemetry).await {
+            Some(user) => Ok(tonic::Response::new(user.into())),
+            None => {
+                let status = tonic::Status::not_found("user not found");
+                my_telemetry_ctx.set_error(&status);
+                Err(status)
+            }
+        }
+    }
+
+    type GetUsersStream = Pin<
+        Box<dyn Stream<Item = Result<UserGrpcModel, tonic::Status>> + Send + Sync + 'static>,
+    >;
+
+    #[with_telemetry]
+    async fn get_users(
+        &self,
+        request: tonic::Request<GetUsersRequest>,
+    ) -> Result<tonic::Response<Self::GetUsersStream>, tonic::Status> {
+        let _request = request.into_inner();
+
+        let result = StreamedResponseWriter::new(1024);
+        tokio::spawn(crate::flows::get_users(self.app.clone(), result.get_stream_producer()));
+
+        my_telemetry_ctx.track_stream(result.get_result())
+    }
+}
+```
 
 ### Types imported from another proto package
 
