@@ -166,8 +166,8 @@ pub fn get_telemetry(
 }
 
 // The header comes from the caller, so anything can be in it. Segments which are not a number are
-// skipped, and what is left decides the kind of the context: `Multiple` with no ids must never be
-// built - my-telemetry panics on it when the event is written.
+// skipped, and what is left decides the kind of the context: no ids - `Empty`, which writes
+// nothing; one - `Single`; more - `Multiple`.
 fn parse_process_id(process_id: &str) -> MyTelemetryContext {
     let mut ids: Vec<i64> = process_id
         .split(',')
