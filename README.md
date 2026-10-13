@@ -507,7 +507,8 @@ rejected when the channel is created rather than silently resolved.
 
 Behind an SSH tunnel the pinned ip is what the tunnel forwards to, so
 `ssh://user@ssh-host:22->http://name@10.0.0.7:8080` makes the **ssh server** connect
-to `10.0.0.7:8080` instead of resolving `name` on its side.
+to `10.0.0.7:8080` instead of resolving `name` on its side. The request still names
+`name:8080` in `:authority`, exactly as it does without the tunnel.
 
 ---
 
@@ -651,7 +652,8 @@ generic over the client type.
 Under the hood the client listens on a local UNIX socket -
 `$HOME/grpc-{user}-{ssh_host}_{ssh_port}--{host}_{port}.sock`, `/tmp` instead of `$HOME` when it is not
 set - which `my-ssh` forwards to `host:port` on the far side of the tunnel, and connects to that
-socket.
+socket. The requests name `host:port` in h2's `:authority` - the same as a direct connection to
+that url would, not the local socket.
 
 ---
 

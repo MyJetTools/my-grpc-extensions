@@ -58,9 +58,13 @@ impl GrpcChannelHolder {
         }
     }
 
+    /// `origin` is what the requests name in h2's `:scheme` and `:authority`.
+    /// Without one they name `unix.socket` - the host of the uri the channel is
+    /// built from, which only carries the socket path to the connector.
     #[cfg(unix)]
     async fn create_unix_socket_channel(
         unix_socket_path: String,
+        origin: Option<hyper::Uri>,
         service_name: &'static str,
     ) -> Result<Channel, GrpcReadError> {
         use std::str::FromStr;
@@ -79,7 +83,13 @@ impl GrpcChannelHolder {
             }
         };
 
-        let channel = Channel::builder(uri)
+        let mut end_point = Channel::builder(uri);
+
+        if let Some(origin) = origin {
+            end_point = end_point.origin(origin);
+        }
+
+        let channel = end_point
             .connect_with_connector(tower::service_fn(|uri: Uri| async move {
                 let unix_socket_path = uri.path();
                 println!("Grpc Client connecting to {}", unix_socket_path);
@@ -102,12 +112,17 @@ impl GrpcChannelHolder {
     async fn connect_to_unix_socket(
         &self,
         connect_url: String,
+        origin: Option<hyper::Uri>,
         service_name: &'static str,
         request_timeout: Duration,
     ) -> Result<Channel, GrpcReadError> {
         let mut attempt_no = 0;
         loop {
-            let feature = Self::create_unix_socket_channel(connect_url.to_string(), service_name);
+            let feature = Self::create_unix_socket_channel(
+                connect_url.to_string(),
+                origin.clone(),
+                service_name,
+            );
 
             match tokio::time::timeout(request_timeout, feature).await {
                 Ok(result) => match result {
@@ -166,6 +181,45 @@ impl GrpcChannelHolder {
         }
     }
 
+    /// What a call made through an ssh tunnel names in h2's `:authority`: the host
+    /// of the url behind the tunnel - the server name, when that url pinned an ip.
+    /// The channel itself is opened to a local unix socket, so without it every
+    /// request would name `unix.socket` and a reverse proxy on the far side of the
+    /// tunnel would have nothing to route the call by. The scheme is always `http`:
+    /// that is what goes through the tunnel.
+    #[cfg(all(unix, feature = "with-ssh"))]
+    fn get_tunnel_origin(connect_url: &GrpcConnectUrl) -> Result<hyper::Uri, GrpcReadError> {
+        use std::str::FromStr;
+
+        let uri = hyper::Uri::from_str(connect_url.get_grpc_host()).map_err(|err| {
+            GrpcReadError::Other(format!(
+                "Failed to parse url:{}. Err: {}",
+                connect_url.as_str(),
+                err
+            ))
+        })?;
+
+        let Some(authority) = uri.authority() else {
+            return Err(GrpcReadError::Other(format!(
+                "Url:{} names no host behind the ssh tunnel",
+                connect_url.as_str()
+            )));
+        };
+
+        hyper::Uri::builder()
+            .scheme("http")
+            .authority(authority.clone())
+            .path_and_query("/")
+            .build()
+            .map_err(|err| {
+                GrpcReadError::Other(format!(
+                    "Failed to parse url:{}. Err: {}",
+                    connect_url.as_str(),
+                    err
+                ))
+            })
+    }
+
     /// Opens the channel. When the url pinned an ip (`server-name@ip`) the socket
     /// goes straight to that address, while the endpoint tonic builds its requests
     /// from keeps the server name - so h2's `:authority` names the server rather
@@ -204,6 +258,7 @@ impl GrpcChannelHolder {
             return self
                 .connect_to_unix_socket(
                     connect_url.get_grpc_host().to_string(),
+                    None,
                     service_name,
                     request_timeout,
                 )
@@ -239,6 +294,8 @@ impl GrpcChannelHolder {
                 }
             };
 
+            let origin = Self::get_tunnel_origin(&connect_url)?;
+
             let unix_socket_name =
                 crate::ssh::generate_unix_socket_file(ssh_credentials, grpc_service_endpoint);
 
@@ -253,7 +310,12 @@ impl GrpcChannelHolder {
                 .await?;
 
             return self
-                .connect_to_unix_socket(unix_socket_name, service_name, request_timeout)
+                .connect_to_unix_socket(
+                    unix_socket_name,
+                    Some(origin),
+                    service_name,
+                    request_timeout,
+                )
                 .await;
         }
 
@@ -356,11 +418,7 @@ mod test {
     /// what has to arrive there, not the ip the connection went to.
     #[tokio::test]
     async fn a_pinned_ip_dials_the_ip_and_sends_the_server_name_as_authority() {
-        use hyper::service::service_fn;
-        use hyper_util::rt::{TokioExecutor, TokioIo};
-        use std::convert::Infallible;
         use std::time::Duration;
-        use tower::ServiceExt;
 
         // Nothing resolves `my-service.example.com`; the listener is on 127.0.0.1,
         // so the call can only arrive by the pinned ip.
@@ -371,25 +429,7 @@ mod test {
 
         tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();
-            // `service_fn` wants an `Fn`, and the sender is single-use.
-            let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
-
-            let _ = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
-                .serve_connection(
-                    TokioIo::new(stream),
-                    service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
-                        let tx = tx.clone();
-                        if let Some(tx) = tx.lock().unwrap().take() {
-                            let _ = tx.send(req.uri().host().map(|host| host.to_string()));
-                        }
-                        async {
-                            Ok::<_, Infallible>(hyper::Response::new(
-                                tonic::body::Body::empty(),
-                            ))
-                        }
-                    }),
-                )
-                .await;
+            serve_and_report_host(stream, tx).await;
         });
 
         let channel = super::GrpcChannelHolder::new()
@@ -405,6 +445,127 @@ mod test {
             .await
             .unwrap();
 
+        assert_eq!(
+            get_reported_host(channel, rx).await.as_deref(),
+            Some("my-service.example.com")
+        );
+    }
+
+    /// A channel to a unix socket names `unix.socket`, unless it is given an
+    /// origin - which is how a call through an ssh tunnel, opened to a local
+    /// socket, still names the server behind the tunnel.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn a_unix_socket_channel_names_the_origin_it_was_given() {
+        for (no, (origin, expected_host)) in [
+            (None, "unix.socket"),
+            (
+                Some("http://my-service.example.com:8080"),
+                "my-service.example.com",
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            // Short on purpose: a unix socket path has to fit into ~100 bytes.
+            let socket_path =
+                std::env::temp_dir().join(format!("mge-{}-{}.sock", std::process::id(), no));
+            let _ = std::fs::remove_file(&socket_path);
+            let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
+
+            let (tx, rx) = tokio::sync::oneshot::channel();
+
+            tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                serve_and_report_host(stream, tx).await;
+            });
+
+            let channel = super::GrpcChannelHolder::create_unix_socket_channel(
+                socket_path.to_str().unwrap().to_string(),
+                origin.map(|origin: &str| origin.parse().unwrap()),
+                "test",
+            )
+            .await
+            .unwrap();
+
+            assert_eq!(
+                get_reported_host(channel, rx).await.as_deref(),
+                Some(expected_host)
+            );
+
+            let _ = std::fs::remove_file(&socket_path);
+        }
+    }
+
+    #[cfg(all(unix, feature = "with-ssh"))]
+    #[test]
+    fn a_tunnel_names_the_server_behind_it() {
+        for (url, expected_authority) in [
+            (
+                "ssh://user@ssh-host:22->http://my-service.example.com@10.0.0.7:8080",
+                "my-service.example.com:8080",
+            ),
+            (
+                "ssh://user@ssh-host:22->http://my-service:8080",
+                "my-service:8080",
+            ),
+            // What goes through the tunnel is plain h2, whatever the url says.
+            (
+                "ssh://user@ssh-host:22->https://my-service.example.com@10.0.0.7:8443",
+                "my-service.example.com:8443",
+            ),
+        ] {
+            let connect_url: super::GrpcConnectUrl = url.to_string().into();
+            let origin = super::GrpcChannelHolder::get_tunnel_origin(&connect_url).unwrap();
+
+            assert_eq!(origin.scheme_str(), Some("http"), "{url}");
+            assert_eq!(
+                origin.authority().map(|authority| authority.as_str()),
+                Some(expected_authority),
+                "{url}"
+            );
+        }
+    }
+
+    /// Serves one h2 connection and reports the host its first request names -
+    /// h2's `:authority`.
+    async fn serve_and_report_host<TStream>(
+        stream: TStream,
+        tx: tokio::sync::oneshot::Sender<Option<String>>,
+    ) where
+        TStream: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
+    {
+        use hyper::service::service_fn;
+        use hyper_util::rt::{TokioExecutor, TokioIo};
+        use std::convert::Infallible;
+
+        // `service_fn` wants an `Fn`, and the sender is single-use.
+        let tx = std::sync::Arc::new(std::sync::Mutex::new(Some(tx)));
+
+        let _ = hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+            .serve_connection(
+                TokioIo::new(stream),
+                service_fn(move |req: hyper::Request<hyper::body::Incoming>| {
+                    let tx = tx.clone();
+                    if let Some(tx) = tx.lock().unwrap().take() {
+                        let _ = tx.send(req.uri().host().map(|host| host.to_string()));
+                    }
+                    async {
+                        Ok::<_, Infallible>(hyper::Response::new(tonic::body::Body::empty()))
+                    }
+                }),
+            )
+            .await;
+    }
+
+    /// Sends one request through the channel and waits for the host the server
+    /// saw in it.
+    async fn get_reported_host(
+        channel: tonic::transport::Channel,
+        rx: tokio::sync::oneshot::Receiver<Option<String>>,
+    ) -> Option<String> {
+        use tower::ServiceExt;
+
         let request = hyper::Request::builder()
             .method("POST")
             .uri("/test.Service/Method")
@@ -413,11 +574,9 @@ mod test {
 
         let _ = channel.oneshot(request).await;
 
-        let authority = tokio::time::timeout(Duration::from_secs(5), rx)
+        tokio::time::timeout(std::time::Duration::from_secs(5), rx)
             .await
             .expect("the server never saw the request")
-            .unwrap();
-
-        assert_eq!(authority.as_deref(), Some("my-service.example.com"));
+            .unwrap()
     }
 }
